@@ -1,0 +1,159 @@
+export type ProjectPath = 'index.html' | 'styles.css' | 'app.js' | (string & {})
+
+export interface ProjectFile {
+  path: ProjectPath
+  content: string
+  bytes: number
+}
+
+const encoder = new TextEncoder()
+
+const starterFiles: Record<string, string> = {
+  'index.html': `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mote project</title>
+  </head>
+  <body>
+    <main>
+      <span class="signal" aria-hidden="true"></span>
+      <h1>Your tiny world is ready.</h1>
+      <p>Ask Mote to build something, or edit the files directly through its tools.</p>
+    </main>
+  </body>
+</html>`,
+  'styles.css': `:root {
+  color: #dce7e8;
+  background: #111719;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  display: grid;
+  min-height: 100vh;
+  margin: 0;
+  place-items: center;
+}
+
+main {
+  width: min(34rem, calc(100% - 3rem));
+  padding: 3rem;
+  border: 1px solid #344346;
+}
+
+.signal {
+  display: block;
+  width: .6rem;
+  height: .6rem;
+  margin-bottom: 2rem;
+  background: #63e6d1;
+}
+
+h1 { margin: 0; font-size: clamp(2rem, 7vw, 4rem); line-height: .95; letter-spacing: -.05em; }
+p { max-width: 38ch; margin: 1.5rem 0 0; color: #91a4a7; line-height: 1.6; }`,
+  'app.js': `console.log("Mote sandbox mounted");
+
+document.querySelector(".signal")?.animate(
+  [
+    { opacity: 0.35, transform: "scale(0.7)" },
+    { opacity: 1, transform: "scale(1)" },
+  ],
+  { duration: 900, iterations: Infinity, direction: "alternate", easing: "ease-in-out" },
+);`,
+}
+
+const seedFiles: Record<string, string> = {
+  'index.html': `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Signal Garden</title>
+  </head>
+  <body>
+    <main>
+      <p class="label">SEED EXAMPLE / 01</p>
+      <h1>Signal<br />Garden</h1>
+      <button id="pulse">Send a pulse</button>
+      <output id="reading">System quiet</output>
+    </main>
+  </body>
+</html>`,
+  'styles.css': `:root { color: #e8f5e9; background: #102318; font-family: ui-monospace, monospace; }
+* { box-sizing: border-box; }
+body { display: grid; min-height: 100vh; margin: 0; place-items: center; }
+main { width: min(38rem, calc(100% - 2rem)); padding: 3rem; border: 1px solid #406348; }
+.label { color: #7ca486; font-size: .7rem; letter-spacing: .12em; }
+h1 { margin: 2rem 0; font: 700 clamp(4rem, 14vw, 8rem)/.78 system-ui; letter-spacing: -.08em; }
+button { padding: .8rem 1rem; color: #102318; background: #a6f0b5; border: 0; font: inherit; cursor: pointer; }
+output { display: block; margin-top: 1rem; color: #7ca486; font-size: .75rem; }`,
+  'app.js': `const button = document.querySelector("#pulse");
+const reading = document.querySelector("#reading");
+button?.addEventListener("click", () => {
+  const value = Math.floor(Math.random() * 900 + 100);
+  reading.textContent = \`Pulse \${value} acknowledged\`;
+  console.log("pulse", value);
+});`,
+}
+
+function normalizePath(path: string): string {
+  const normalized = path.trim().replaceAll('\\', '/').replace(/^\.?\//, '')
+  if (!normalized || normalized.includes('..') || normalized.startsWith('/')) {
+    throw new Error(`Invalid project path: ${path}`)
+  }
+  return normalized
+}
+
+export class VirtualFileSystem {
+  private files = new Map<string, string>(Object.entries(starterFiles))
+  private listeners = new Set<() => void>()
+  private revision = 0
+
+  getRevision = (): number => this.revision
+
+  subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+
+  list(): ProjectFile[] {
+    return [...this.files.entries()]
+      .map(([path, content]) => ({ path, content, bytes: encoder.encode(content).byteLength }))
+      .sort((a, b) => a.path.localeCompare(b.path))
+  }
+
+  read(path: string): string {
+    const normalized = normalizePath(path)
+    const content = this.files.get(normalized)
+    if (content === undefined) throw new Error(`File not found: ${normalized}`)
+    return content
+  }
+
+  write(path: string, content: string): number {
+    const normalized = normalizePath(path)
+    this.files.set(normalized, content)
+    this.notify()
+    return encoder.encode(content).byteLength
+  }
+
+  reset(): void {
+    this.files = new Map(Object.entries(starterFiles))
+    this.notify()
+  }
+
+  seed(): void {
+    this.files = new Map(Object.entries(seedFiles))
+    this.notify()
+  }
+
+  private notify(): void {
+    this.revision += 1
+    for (const listener of this.listeners) listener()
+  }
+}
+
+export const projectFS = new VirtualFileSystem()

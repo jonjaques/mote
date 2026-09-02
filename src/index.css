@@ -465,6 +465,12 @@
   gap: 0.25rem;
 }
 
+.workspace-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 .workspace-tab {
   position: relative;
   display: inline-flex;
@@ -501,6 +507,199 @@
 .workspace-tab:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+.workspace-surface {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: oklch(0.115 0.007 255);
+}
+
+.view-panel {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  min-width: 0;
+  min-height: 0;
+}
+
+.view-panel.is-active {
+  visibility: visible;
+}
+
+.sandbox-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: white;
+}
+
+.files-view {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  grid-template-columns: minmax(11rem, 16rem) minmax(0, 1fr);
+  background: var(--background);
+}
+
+.file-tree {
+  min-width: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.file-tree-heading,
+.file-content header,
+.console-view > header {
+  display: flex;
+  min-height: 2.6rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0 0.8rem;
+  color: var(--muted-foreground);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.file-tree-heading strong {
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.file-tree > button {
+  display: grid;
+  width: 100%;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.8rem;
+  color: var(--muted-foreground);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid color-mix(in oklch, var(--border), transparent 45%);
+  cursor: pointer;
+  text-align: left;
+}
+
+.file-tree > button:hover,
+.file-tree > button.is-selected {
+  color: var(--foreground);
+  background: var(--muted);
+}
+
+.file-tree > button.is-selected {
+  box-shadow: inset 1px 0 var(--primary);
+}
+
+.file-tree > button svg {
+  width: 0.8rem;
+  height: 0.8rem;
+  color: var(--cyan-dim);
+}
+
+.file-tree > button span {
+  overflow: hidden;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-tree > button small,
+.file-content header small {
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.file-content {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.file-content header span {
+  color: var(--foreground);
+  text-transform: none;
+}
+
+.file-content pre {
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  padding: 1.25rem;
+  color: oklch(0.83 0.035 220);
+  background: oklch(0.11 0.008 255);
+  font: 0.72rem/1.65 ui-monospace, SFMono-Regular, Menlo, monospace;
+  tab-size: 2;
+  white-space: pre;
+}
+
+.console-view {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: oklch(0.11 0.008 255);
+}
+
+.console-lines {
+  min-height: 0;
+  overflow: auto;
+  padding: 0.6rem 0;
+}
+
+.console-empty {
+  margin: 2rem;
+  color: var(--muted-foreground);
+  font: 0.72rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.console-line {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.6rem;
+  padding: 0.42rem 0.8rem;
+  color: oklch(0.79 0.025 230);
+  border-bottom: 1px solid color-mix(in oklch, var(--border), transparent 65%);
+  font: 0.7rem/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.console-line svg {
+  width: 0.75rem;
+  height: 0.75rem;
+  margin-top: 0.15rem;
+  color: var(--cyan-dim);
+}
+
+.console-line time {
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.console-line code {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.console-warn,
+.console-warn svg {
+  color: oklch(0.78 0.13 80);
+}
+
+.console-error,
+.console-error svg {
+  color: oklch(0.73 0.16 28);
 }
 
 .workspace-placeholder {

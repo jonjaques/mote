@@ -76,7 +76,9 @@ async function loadLocalRecords(): Promise<ModelRecord[]> {
       const baseId = record.model_id
       return withOverrides({
         ...record,
+        model: new URL(record.model, window.location.origin).href,
         model_id: `${baseId}${LOCAL_SUFFIX}`,
+        model_lib: new URL(record.model_lib, window.location.origin).href,
       })
     })
   } catch {
