@@ -18,7 +18,7 @@ Chrome 152).
 | Inference | `@mlc-ai/web-llm` **0.2.84** via `WebWorkerMLCEngine` | Keeps the React UI responsive; chat.webllm.ai uses a service worker only to survive reloads, which a POC doesn't need |
 | Where weights come from | Hugging Face `mlc-ai/*` repos + prebuilt wasm from `binary-mlc-llm-libs`, exactly as chat.webllm.ai does; **optionally served from `./models/` in dev** | HF is rate-limited and 4 GB re-downloads hurt; a local mirror also lets us serve models that aren't in the prebuilt list |
 | Fast model | `Qwen3-0.6B-q4f16_1-MLC` — 320 MB weights, 1.4 GB VRAM | Smallest model that was trained on `<tool_call>` tool use; thinking can be switched off per request |
-| Smart model | `Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC` — 830 MB weights, 1.6 GB VRAM | Code-tuned, same chat family and tool format as the fast model; the 7B was started and stopped at 2 GB because the download was too heavy for this pass (partial mirror kept, resumable) |
+| Smart model | `Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC` — 830 MB weights, 1.6 GB VRAM | Code-tuned, same chat family and tool format as the fast model; the 7B is mirrored too and sits in the picker as the step-up |
 | Tool calling | `response_format: { type: "structural_tag" }` (XGrammar), **not** WebLLM's `tools` parameter | `tools` is hard-gated to five Hermes models; structural tags work with any model and guarantee parseable calls |
 | Tool results back to the model | `user` message wrapped in `<tool_response>…</tool_response>` | WebLLM throws `Role is not supported: tool` for Qwen templates (their `roles` map has no `tool`); the wrapper is what Qwen's own chat template emits |
 | Sandbox | `<iframe sandbox="allow-scripts" srcdoc=…>` + `postMessage` bridge | Opaque origin: the model's code can't touch the host page, storage, or the model cache |
@@ -34,13 +34,15 @@ Chrome 152).
 - **`scripts/cdp-trace.mjs`** (`pnpm cdp:trace …`): launches Chrome with remote debugging, attaches
   to every target (page, workers, service workers) over raw CDP, and records every model artifact
   request. Zero dependencies. See §2 for what it found.
-- **Both models mirrored** to `./models/` (gitignored) with `models/index.json` describing them as
-  WebLLM `ModelRecord`s pointing at `/models/<id>/`. A stopped, partial mirror of
-  `Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC` (35 of 88 shards, 2 GB) sits alongside; it is not in the
-  index and `pnpm models download <id>` resumes it, or `rm -r` it to reclaim the space.
-- `.gitignore` covers `models/`, `.cdp-profile/`, `cdp-trace*.json`.
+- **Three models mirrored** to `./models/` (gitignored) with `models/index.json` describing them as
+  WebLLM `ModelRecord`s pointing at `/models/<id>/`: the fast 0.6B, the smart 1.5B coder, and the
+  7B coder (4.1 GB, complete).
+- `.gitignore` covers `models/`, `.cdp-profile/`, `cdp-trace*.json`, `cdp-report*.json`.
+- **`scripts/cdp-agent.mjs`** (`pnpm cdp:agent …`): drives the finished app through
+  `window.__llmcoder` in a visible Chrome, runs the M3/M4 prompts repeatedly, probes the rendered
+  sandbox, and reports pass rates. See §3.
 
-Nothing under `src/` has been touched yet; it is still the Vite template.
+Milestones M1–M5 below are implemented; `HANDOFF.md` records what was measured.
 
 ---
 
@@ -145,9 +147,25 @@ its own profile, `Target.setAutoAttach(flatten)` + `Network.enable` on every ses
 `--send` types into the first textarea, then writes a JSON trace with per-request kind, host,
 bytes and timing, plus a dump of the `webllm/*` caches. Chrome ≥136 refuses remote debugging on
 the default profile, so the profile is always separate (`.cdp-profile/`); use it as a
-reproducible prewarm/benchmark target, not to warm your daily browser. Once M1 lands the app
-will expose `?model=&autoload=1` and a `window.__llmcoder` status object so the same script can
-time our own loads.
+reproducible prewarm/benchmark target, not to warm your daily browser. The app exposes
+`?model=&autoload=1` and a `window.__llmcoder` status object so the same script can time our
+own loads. The launch and session plumbing is shared with the agent harness in `scripts/cdp.mjs`.
+
+### `pnpm cdp:agent` — `scripts/cdp-agent.mjs`
+
+```
+pnpm cdp:agent --scenario m3 --trials 10        # M3 acceptance: blue background + alert button
+pnpm cdp:agent --scenario coffee                # M4: coffee-shop page, then "make the header sticky"
+pnpm cdp:agent --prompt "make the footer red"   # ad hoc, no checks
+```
+
+Launches a **visible** Chrome by default (`--headless` to hide it), autoloads the scenario's model
+(`--model` overrides), and drives the app only through `window.__llmcoder` — `send`, `resetProject`,
+`runInSandbox`, `getProject`, `getMessages` — never through selectors or synthetic typing. Every
+probe runs inside the sandbox through the same bridge the agent's `run_js` uses, because the
+iframe's opaque origin hides the rendered page from the host and from CDP alike. The report
+(`cdp-report.json`) records per-trial rounds, seconds, tool calls, changed files, console errors,
+probe values and the failure reason; the summary prints pass and one-round rates per scenario.
 
 ---
 
@@ -159,7 +177,7 @@ time our own loads.
 | **smart / pages** | `Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC` | 830 MB, 30 shards | 1.6 GB | Prebuilt record caps context to 4096 — we override to 8192 (KV cache grows, fine here). Simple pages only; expect plain layouts |
 | alt fast | `Llama-3.2-1B-Instruct-q4f16_1-MLC` | ~600 MB | 0.9 GB | The model the official structural-tag example uses; switch here if Qwen3-0.6B tool calls prove flaky |
 | step up | `Qwen2.5-Coder-3B-Instruct-q4f16_1-MLC` | 1.7 GB, 62 shards | 2.5 GB | First upgrade to try when 1.5B pages look thin |
-| step up | `Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC` | 4.1 GB, 88 shards | 5.1 GB | The real page builder; 2 GB of it is already on disk, resumable |
+| step up | `Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC` | 4.1 GB, 88 shards | 5.1 GB | The real page builder; fully mirrored in `./models/` |
 | alt smart | `Qwen3-8B-q4f16_1-MLC` | ~4.6 GB | 5.7 GB | Stronger reasoning, thinking on/off; slower first token |
 | alt smart | `Qwen3.5-9B-q4f16_1-MLC` | ~5 GB | 6.4 GB | Newest in the 0.2.84 list; untested |
 
@@ -362,7 +380,7 @@ pnpm install
 pnpm models list --filter qwen --max-vram 6000       # what's available
 pnpm models download Qwen3-0.6B-q4f16_1-MLC           # already done → models/…
 pnpm models download Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC   # already done
-pnpm models download Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC     # resumes the partial 2 GB mirror, when wanted
+pnpm models download Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC     # already done (4.1 GB)
 pnpm models verify Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC
 pnpm cdp:trace --url https://chat.webllm.ai --send hi # reproduce §2.1
 pnpm dev                                              # http://localhost:5173
