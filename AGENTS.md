@@ -46,6 +46,8 @@ pnpm cdp:trace --url "http://localhost:5173/?model=Qwen3-0.6B-q4f16_1-MLC&autolo
 | `src/llm/tools.ts` | tool schemas, structural tag, parse/run |
 | `src/llm/agent.ts` | prompt → stream → tool → `<tool_response>` loop |
 | `src/llm/prompts.ts` | system prompts |
+| `src/llm/stream.ts` | per-token buffer for the live stream box |
+| `src/automation.ts` | `window.__llmcoder`, the only surface the CDP harness touches |
 | `src/sandbox/fs.ts` | virtual filesystem singleton |
 | `src/sandbox/runtime.ts` | host/iframe bridge, inlined runtime |
 | `src/sandbox/document.ts` | `srcdoc` assembly |
@@ -121,7 +123,11 @@ Do not introduce a store library. Do not duplicate file or console state in Reac
   emit `\"` soup or truncate, switch `write_file` to the `any_text` raw-content
   tag described in `PLAN.md` §5.4 — do not invent a third format.
 - Surface `finish_reason === "length"` as a Continue action. Do not silently
-  loop. Stop calls `engine.interruptGenerate()`.
+  loop. Stop calls `engine.interruptGenerate()`; `finish_reason === "abort"`
+  keeps tools that already ran and starts nothing more.
+- Tool blocks run as soon as `scanToolBlocks` reports them whole, while the
+  stream continues. Never parse the stream with a regex to the closing tag:
+  file content contains braces and fences.
 
 ## Interface
 
@@ -135,6 +141,8 @@ Do not introduce a store library. Do not duplicate file or console state in Reac
   on the load progress bar. The design hook blocks those writes.
 - Do not put Inter (or other hook-flagged faces) in **sandbox** starter CSS.
   The host app may keep Inter; generated pages should use a system stack.
+- Per-token updates go through `liveStream`, not the reducer. Only the
+  stream box subscribes to it.
 - Seed-example is **dev-only**. Do not ship it behind `import.meta.env.DEV` being
   false.
 

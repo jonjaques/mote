@@ -215,16 +215,19 @@ src/
     worker.ts        WebWorkerMLCEngineHandler — the whole engine lives here
     engine.ts        singleton WebWorkerMLCEngine; appConfig = prebuilt ∪ local mirror; progress events
     models.ts        curated list (the two chosen + alternates), VRAM/feature guard, ctx overrides
-    tools.ts         tool definitions {name, description, schema, run} + structural-tag builder
-    agent.ts         the loop: prompt → stream → parse <tool_call> → run → <tool_response> → repeat
+    tools.ts         tool definitions {name, description, schema, run}, structural-tag builder, block scanner
+    agent.ts         the loop: prompt → stream → run blocks as they close → <tool_response> → repeat
     prompts.ts       system prompts (chat vs. page-builder)
+    stream.ts        per-token buffer of the round being generated (outside React state)
   sandbox/
-    Sandbox.tsx      <iframe> + bridge; assembles srcdoc from the virtual FS
-    runtime.ts       script inlined into every srcdoc: console/error capture, run_js, DOM snapshot
-    fs.ts            virtual FS (Map<path, content>) + localStorage persistence
+    Sandbox.tsx      the keyed <iframe> + bridge attach
+    document.ts      assembles srcdoc from a store snapshot
+    runtime.ts       script inlined into every srcdoc: console/error capture, run_js, DOM snapshot, dialogs, submits
+    fs.ts            virtual FS (Map<path, content>) + localStorage persistence + snapshots
   ui/
     SidePane.tsx  ModelPicker.tsx  Chat.tsx  ToolCallCard.tsx  MainArea.tsx  FilesView.tsx  ConsoleView.tsx
-  state.tsx          one reducer + context (no store library for a POC)
+  automation.ts      window.__llmcoder: status + methods the CDP harness drives
+  state.tsx          one reducer + context (no store library)
 vite.config.ts       + serveModels() dev middleware for ./models → /models/
 ```
 

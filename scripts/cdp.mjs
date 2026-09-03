@@ -134,13 +134,19 @@ export function autoAttach(cdp, { onSession, onCrash } = {}) {
     if (method === "Target.targetCrashed" || method === "Inspector.targetCrashed") {
       // A crashed renderer takes the model with it and a visible tab reloads itself, which
       // looks like a mysterious "page reloaded" unless the crash is reported here.
-      const target = [...sessions.values()].find((t) => t.targetId === params.targetId);
-      onCrash?.({ ...params, url: target?.url });
+      const target = params?.targetId
+        ? [...sessions.values()].find((t) => t.targetId === params.targetId)
+        : sessions.get(msg.sessionId);
+      onCrash?.({ ...(params ?? {}), url: target?.url, type: target?.type });
       return;
     }
     if (method === "Target.attachedToTarget") {
       const { sessionId, targetInfo, waitingForDebugger } = params;
       sessions.set(sessionId, targetInfo);
+      // Inspector.targetCrashed only arrives on sessions that enabled the domain.
+      if (targetInfo.type === "page" || targetInfo.type === "iframe") {
+        await cdp.send("Inspector.enable", {}, sessionId).catch(() => {});
+      }
       if (onSession) await onSession(sessionId, targetInfo).catch(() => {});
       await cdp
         .send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, sessionId)

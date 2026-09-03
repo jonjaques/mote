@@ -10,7 +10,8 @@ to do next.
 - Branch: `main`. No remote. Package manager is **pnpm**.
 - Dev server: `pnpm dev --port 5180 --strictPort` → http://localhost:5180/.
   Another agent on this machine uses 5173/5174; keep 5180.
-- `pnpm build` (tsc + vite) and `pnpm test` (vitest, 45 tests) are green.
+- `pnpm build` (tsc + vite) and `pnpm test` (vitest, 49 tests) are green; `pnpm lint`
+  reports only the pre-existing shadcn fast-refresh warnings.
 - Local mirrors in `./models/` (gitignored), all three verified complete with
   `pnpm models verify <id>`: `Qwen3-0.6B-q4f16_1-MLC` (fast),
   `Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC` (smart),
@@ -60,17 +61,33 @@ to do next.
    22+ ships an undefined `localStorage` global that the DOM environment will
    not overwrite.
 8. Page title is “Mote”. `PLAN.md` §1/§3/§4 refreshed.
+9. **Eager tool execution.** `scanToolBlocks` in `src/llm/tools.ts` walks the
+   growing stream (string-aware, so braces and fences inside file content
+   cannot end a block early). The agent runs each call the moment its object
+   is whole; a 7B page written as three files lands in the preview one file
+   at a time. A whole object whose closing tag never arrived still counts.
+   Stop keeps what already ran and starts nothing more.
+10. **Interface** (`e947d28`): last model remembered and auto-loaded when
+    cached; live status line + raw stream box under the pending reply
+    (`src/llm/stream.ts` is the per-token buffer, outside React state); stats
+    line (seconds, tokens, tok/s, rounds); Clear context / New session; Esc
+    stops; tool cards link paths to the editor and show run_js code, results
+    and runtime errors; CodeMirror editor with Save (⌘S) / Discard; preview
+    width toggle and Reload; inline confirmations; grouped model menu; version
+    from `package.json`. Sandbox `alert`/`confirm`/`prompt` become a toast
+    plus a console line; `allow-forms` + `form-action 'none'` turn a submit
+    into feedback instead of nothing.
 
 ## Measurements (all with the final configuration unless noted)
 
 | Scenario | Model | Result | Notes |
 |---|---|---|---|
-| M3 “make the background blue” ×10 | 0.6B | 10/10 | one round each, ~1 s; measured before the fence trigger and `at_least_one` landed |
-| M3 “add a button that alerts hi” ×10 | 0.6B | 9/10 | one round each; the miss rendered a button with no handler |
+| M3 “make the background blue” ×10 | 0.6B | 10/10 | one round each, ~1 s; re-measured with the final loop and interface |
+| M3 “add a button that alerts hi” ×10 | 0.6B | 9/10 | one round each; the miss rendered no button |
 | M4 coffee-shop page ×5 | 1.5B | 4/5 pages | two-file pages; the miss lacked a menu |
 | M4 “make the header sticky” ×5 | 1.5B | 1/5 | 3× `run_js` used as an editor, 1× rewrote `styles.css` without a sticky rule |
-| M4 coffee-shop page ×3 | 7B | 3/3 | writes all three files in one round; 52–136 s per page |
-| M4 “make the header sticky” ×3 | 7B | 3/3 | first write refused by the overwrite rule, then read → rewrite; form and menu preserved every time |
+| M4 coffee-shop page ×3 (+2 final) | 7B | 3/3, then 1/2 | writes all three files in one round; 52–136 s per page. One final trial was lost to the tab reloading mid-generation (see landmines) |
+| M4 “make the header sticky” ×3 (+2 final) | 7B | 3/3, then 1/2 | overwrite rule: write refused → read → rewrite, stylesheet preserved 100%. The miss appended a `.sticky` rule without applying the class in the HTML |
 
 The M3 acceptance (9/10 valid pages in one round) is met with the JSON
 `write_file` format; the `any_text` fallback in PLAN §5.4 was not needed. The
@@ -92,30 +109,37 @@ read before a follow-up write).
    `useSyncExternalStore(projectFS.subscribe, projectFS.getSnapshot)`.
 2. **Chrome writes into `.cdp-profile/`** and Vite reloads the page for it
    unless the watcher ignores the directory.
-3. **A refreshed harness tab loses the run.** The harness polls a promise on
+3. **Editing `src/` during a harness run reloads the page under it** (Vite
+   full reload for non-component modules). Wait for `report written`.
+   Twice, the harness tab also came back fresh a few seconds into a **7B**
+   generation with no Vite reload logged and no crash report on disk. It
+   looks like a renderer crash followed by Chrome's auto-reload of a visible
+   tab; both times another Chrome on the machine also had a model in GPU
+   memory. `scripts/cdp.mjs` now enables the Inspector domain and prints
+   `!! target crashed` when it can see one. Unresolved.
+4. **A refreshed harness tab loses the run.** The harness polls a promise on
    `window`; after a manual refresh it waits out `--step-timeout`. Kill the
    `cdp-agent` process and the Chrome it spawned (`pkill -f cdp-profile`)
    before starting another run, or the profile lock refuses the launch.
-4. **`tools` throws for non-Hermes models** in WebLLM 0.2.84
+5. **`tools` throws for non-Hermes models** in WebLLM 0.2.84
    (`functionCallingModelIds` in `lib/index.js`). Structural tags are the
    supported path; the implementation matches the official example.
-5. **The mirror must contain `tensor-cache.json`.** 0.2.84 fetches it before
+6. **The mirror must contain `tensor-cache.json`.** 0.2.84 fetches it before
    `ndarray-cache.json`; a 404 surfaces as
    `Failed to execute 'add' on 'Cache': Request failed`. `pnpm models verify`
    reports it, `pnpm models download` fetches only what is missing.
-6. Everything in the previous handoff's list still applies: `resolve/main/`
+7. Everything in the previous handoff's list still applies: `resolve/main/`
    in local records, JSON 404 for mirror misses, absolute same-origin URLs,
    `user` + `<tool_response>` for Qwen, no `baseUrl`, no `models/` in `public/`.
 
 ## What is unverified
 
-- The 0.6B has not been re-measured after the fence trigger, `at_least_one`
-  and the overwrite rule landed. Run `pnpm cdp:agent --scenario m3 --trials 10`.
 - Nothing has been measured against Hugging Face-served records; every run
   used the local mirror.
-- Mobile layout, keyboard focus and the Continue action were not exercised
-  by the harness (it never sends a prompt long enough to hit
-  `finish_reason === "length"`).
+- The Continue action was not exercised (no harness prompt is long enough to
+  hit `finish_reason === "length"`).
+- The stacked (≤760 px) layout was checked by screenshot at 390 and 760 px,
+  not on a device; the model menu and the editor were not tried on touch.
 
 ## Next
 
@@ -133,3 +157,7 @@ read before a follow-up write).
    (`classList`, `.style`, `innerHTML`). Measure it with
    `pnpm cdp:agent --scenario coffee --trials 5` before keeping it.
 4. `chatPrompt` in `src/llm/prompts.ts` is still unused.
+5. Interface ideas not done: Markdown in assistant replies, a diff view for
+   tool writes, an "open preview in new tab" (needs a blob URL and would
+   escape the opaque origin — do not), file create/delete in the editor,
+   cancelling a model load (WebLLM has no cancel; `unload()` after).
