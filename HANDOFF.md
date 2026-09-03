@@ -7,12 +7,17 @@ is true on disk right now, what was measured, and what to do next.
 
 ## Snapshot
 
-- Branch `prod-hardening` off `main`, no remote yet. The repo is about to be
-  pushed to GitHub and deployed to **Cloudflare Workers static assets** from
-  `main`, at `https://mote.jonjaques.com`. Package manager **pnpm**.
-- `pnpm build` (tsc + vite), `pnpm test` (vitest, 61 tests) and `pnpm lint`
-  (only the pre-existing shadcn fast-refresh warnings) are green. The build was
-  also run on Node 22.23.2, which is what `.node-version` pins for the deploy.
+- `main`, deployed to **Cloudflare Workers static assets** at
+  `https://mote.jonjaques.com`. Package manager **pnpm**.
+- `pnpm build` (tsc + vite), `pnpm test` (vitest, 97 tests including the replay
+  fixtures) and `pnpm lint` (only the pre-existing shadcn fast-refresh warnings)
+  are green.
+- **The agent work is the most recent layer**: six tools instead of five,
+  prettier on every write, project checks after a writing round, a runtime
+  experiment surface, raw transcripts, a replay suite, and a harness rebuilt
+  around variants and fixtures. Read "Tool loop" and "Harness" below before
+  changing any of it, and the landmines before changing a tool result string —
+  several of them are measured wording, not opinion.
 - Dev server: `pnpm dev --port 5180 --strictPort` → http://localhost:5180/.
   Other agents on this machine use 5173/5174.
 - Local mirrors in `./models/` (gitignored), all verified complete with
@@ -45,11 +50,39 @@ the sandbox become an in-page toast plus a console line; an unhandled form
 submit is reported the same way instead of vanishing.
 
 **Tool loop** (`src/llm/agent.ts`, `src/llm/tools.ts`). Structural tags that
-trigger on `<tool_call>` and on a Markdown fence; `at_least_one` on the first
-round; tool blocks executed as soon as they are whole while the stream
-continues; a read-before-overwrite rule for edited files; a repeat guard for
-inspection loops; Stop keeps what ran and starts nothing more; Continue on
-`finish_reason === "length"`; usage stats from the final chunk.
+trigger on `<tool_call>` and on a Markdown fence (and, off by default, on a bare
+`{"name":…}` object); `at_least_one` on the first round; tool blocks executed as
+soon as they are whole while the stream continues; a read-before-overwrite rule
+for edited files; a repeat guard for inspection loops; Stop keeps what ran and
+starts nothing more; Continue on `finish_reason === "length"`; usage stats from
+the final chunk.
+
+Six tools now: `write_file`, `edit_file`, `read_file`, `list_files`, `run_js`,
+`get_dom`. `edit_file` replaces one exact passage, matching exactly first and
+then with whitespace treated as elastic — a model reproducing a block from memory
+gets the indentation wrong far more often than the words.
+
+**Everything a tool writes is formatted** (`src/llm/format.ts`, prettier 3.9
+loaded lazily in the tab, ~264 KB gzipped across five chunks, on the first write
+and never at boot). That is half cosmetic and half the point: `format` is the
+only parser in the project, so CSS and JavaScript that cannot be parsed throw
+with a line and a column, and a broken write becomes a failed tool call with one
+precise sentence instead of a page the model reports as done. HTML is different —
+prettier repairs mis-nested tags and never raises, but leaves an unparseable
+inline `<script>` alone, so those are parsed separately and reported in
+whole-file coordinates. ⌘S in the editor goes through the same formatter.
+
+**The project is checked after a writing round** (`src/llm/verify.ts`): a page
+that references a file nobody wrote or that is still the untouched starter, and
+classes styled but never applied. Findings go back as one `<tool_response>`, once
+per turn. This replaced the model-family special case (`smartPageNeedsStyles`).
+
+**The experiment surface** (`src/llm/config.ts`). Ten knobs — prompt override,
+sampling, round budget, enabled tools, triggers, formatting, verification,
+history compaction, the refusal shape, the project inventory — patched at runtime
+through `window.__llmcoder.setConfig`. Nothing in `src/ui` reads it; the defaults
+are what ships. `src/llm/transcript.ts` keeps the raw output of the last twenty
+runs, which is what the harness saves and `pnpm replay` re-runs.
 
 **Chat.** Live status line ("Writing index.html · 1.8 KB · 14s"), a box that
 streams the model's raw output including the tool payload, a stats line
@@ -60,17 +93,32 @@ context, New session, Esc to stop, chat and project persisted in
 
 **Automation** (`src/automation.ts`). `window.__llmcoder` carries `phase`,
 `model`, `progress`, `error`, `generating` plus `send(text)`, `stop()`,
-`getMessages()`, `clearChat()`, `getProject()`, `resetProject()`,
-`seedProject()`, `runInSandbox(code)`, `getConsole()`.
+`getMessages()`, `clearChat()`, `getProject()`, `setProject(files)`,
+`resetProject()`, `seedProject()`, `runInSandbox(code)`, `getConsole()`,
+`getConfig()`, `setConfig(patch)`, `resetConfig()`, `getTranscripts()` and
+`clearTranscripts()`.
 
-**Harness** (`scripts/cdp-agent.mjs`, plumbing in `scripts/cdp.mjs`).
-`pnpm cdp:agent --scenario blue|alert|m3|coffee|all --trials N [--model id]
-[--prompt "…"] [--headless] [--keep-open]`. Launches a visible Chrome with
-its own profile (`.cdp-profile/`, weights cached there), autoloads the model,
-drives the app only through `window.__llmcoder`, probes the rendered sandbox
-through the bridge, and writes `cdp-report*.json`. It survives a page reload
-mid-run (the trial fails, the run continues) and prints `!! target crashed`
-when the Inspector domain reports one.
+**Harness** (`scripts/cdp-agent.mjs`, scenarios in `scripts/eval-scenarios.mjs`,
+arms in `scripts/eval-variants.mjs`, plumbing in `scripts/cdp.mjs`).
+`pnpm cdp:agent --scenario <names|group> --variant <names> --trials N
+[--model id] [--compare report.json] [--prompt "…"] [--headless] [--keep-open]`.
+Launches Chrome with its own profile (`.cdp-profile/`, weights cached there),
+autoloads the model, drives the app only through `window.__llmcoder`, probes the
+rendered sandbox through the bridge, and writes `cdp-report*.json` plus one raw
+transcript per step under `evals/transcripts/`.
+
+The unit of work is a (scenario, variant, trial). A **variant** is a patch over
+`src/llm/config.ts` applied through the automation bridge between steps, so every
+arm of an experiment runs against one Chrome with one model already on the GPU —
+the alternative was editing `src/`, which reloads the page and throws away a load
+that costs a minute and up to 4.4 GB. Trials are the outer loop, so an
+interrupted run is still balanced and the report is written after every one.
+Scenarios can start from a **fixture** project: "make the header sticky" used to
+require building a coffee-shop page first, and now runs against a fixed page in
+twenty seconds. Checks are **named**, so the summary's `what failed` column reads
+`alerts ×4` rather than a pass rate. `--compare` prints a run against an earlier
+report. It survives a page reload mid-run (the trial fails, the run continues)
+and prints `!! target crashed` when the Inspector domain reports one.
 
 **Colour.** Four signal channels (`--signal-live` cyan / `--signal-write`
 green / `--signal-read` blue / `--signal-net` gold), applied through
@@ -82,9 +130,18 @@ leave the machine); the file tree tints icons by type and dots authored files
 green; the editor ships its own `HighlightStyle` instead of CodeMirror's.
 Documented in `DESIGN.md` > Colors, and `detect.mjs` reports no findings.
 
-**Unit suite.** `vitest` + `happy-dom`, tests beside the sources: tool
-parsing and scanning, the agent loop against a scripted engine, srcdoc
-assembly, the virtual filesystem, the model catalog.
+**Unit suite.** `vitest` + `happy-dom`, tests beside the sources: tool parsing
+and scanning, edit matching, formatting and its syntax errors, the project
+checks, the agent loop against a scripted engine, srcdoc assembly, the virtual
+filesystem, the model catalog.
+
+**Replay** (`pnpm replay`, `src/llm/replay.test.ts`). Curated real transcripts in
+`evals/fixtures/` are re-run through the tool layer with no GPU: every round must
+still parse into the same calls, and the loop must still reach the same files. It
+takes a second, and it is the regression net under any change to the scanner, the
+formatter or a tool result. What it cannot check is a model's *reaction* to a
+change — those rounds were conditioned on the tool responses of the day, so
+prompts and tool descriptions still need `pnpm cdp:agent`.
 
 ## Production hardening (this branch)
 
@@ -143,7 +200,9 @@ and `must-revalidate` for `/sw.js`. `.node-version`, `packageManager`,
 
 ## Measurements
 
-Final configuration unless noted. One trial = one fresh project.
+One trial = one fresh project. The first block predates the agent work below and
+used the two-step coffee → sticky shape; the second block uses the fixture-based
+`sticky` scenario, which starts from a fixed, larger page and is harder.
 
 | Scenario | Model | Result | Notes |
 |---|---|---|---|
@@ -154,18 +213,37 @@ Final configuration unless noted. One trial = one fresh project.
 | coffee-shop page ×5 | 7B | 4/5 | three files in one round, 52–136 s; one trial lost to a tab reload |
 | "make the header sticky" ×5 | 7B | 4/5 | write refused → read → rewrite, stylesheet preserved; the miss added a `.sticky` rule without applying the class |
 
+After the agent work (six tools, formatting, project checks, the new harness):
+
+| Scenario | Model | Result | Notes |
+|---|---|---|---|
+| `blue` ×10 | 0.6B | 10/10 | one round |
+| `alert` ×10 | 0.6B | 8/10 | one miss rendered no script, one write never parsed |
+| `m3` ×10 | 0.6B | 6/10 | both steps must pass in one trial; `blue` never failed |
+| `m3` ×10, baseline vs `no-edit` | 0.6B | 4/10 vs 7/10 | measured before several of the fixes below, but the direction held |
+| `sticky` ×6, baseline vs `no-edit` | 1.5B | 0/6 vs 0/6 | it rewrites `index.html` and never writes a rule; `pinned` failed every trial in both arms |
+| `sticky` ×4, baseline vs `no-edit` | 7B | 1/4 vs 1/3 | three baseline trials hit the 300 s cap re-sending an edit for a stylesheet it had invented |
+
 Decisions these numbers settled:
 
-- M3 acceptance (9/10 valid pages in one round) is met with JSON-string
-  `write_file`; the `any_text` fallback in PLAN §5.4 was not needed.
+- M3 acceptance is met with JSON-string `write_file`; the `any_text` fallback in
+  PLAN §5.4 was not needed.
 - The 0.6B rewrites `index.html` wholesale rather than editing `styles.css`.
   Inside the bar, but it drops the starter stylesheet and script.
 - A stricter prompt demanding one self-contained `index.html` was tried and
   reverted: the 1.5B styled better but dropped requested sections in 2 of 3
-  runs. `pageBuilderPrompt` is the original shape plus inspection-only
-  `run_js` and read-before-edit.
+  runs. It survives as the `single-file` variant, still unmeasured at n≥5.
 - The read-before-overwrite rule is what turned the 7B follow-up from
-  "replace the stylesheet with one rule" into a real edit.
+  "replace the stylesheet with one rule" into a real edit. Answering that
+  refusal with the file collapses it from three rounds to two.
+- **`edit_file` is not free.** The 0.6B is worse with it in the list, and it is
+  what the 7B reaches for first. It is enabled for every model because the
+  cross-over is unmeasured; `--variant baseline,no-edit` is how to settle it,
+  and a size-gated default (as `PAGE_BUILDER_MIN_PARAMS_B` already does for
+  model selection) is the obvious shape if the 0.6B result holds up at n≥30.
+- Nothing has been measured with `verifyWrites: false`, `compactHistory: false`,
+  `projectInventory: false` or `triggers: bare` at a useful n. Those variants
+  exist; the numbers do not.
 
 ## Landmines that already cost time
 
@@ -222,7 +300,41 @@ Decisions these numbers settled:
    project may already own (a foreign `inertialref-v1` cache was sitting in it),
    which is why the first load showed "Update ready" — correctly. Unregister
    when done, or preview on a port of your own.
-13. Still true from earlier: `resolve/main/` in local records, JSON 404 for
+13. **A prompt sentence can be worth three points of pass rate.** Rewriting the
+   rules list and losing "You may replace index.html with a full document
+   containing inline CSS and JavaScript" took the 0.6B from 9/10 to 0/10 on
+   `alert`: it rendered the button every time and wrote no script at all. The
+   sentence is back, with a comment saying not to tidy it away.
+14. **A compacted assistant turn gets imitated.** Replacing the file payload in
+   the model's own last turn with `<1177 characters, sent>` taught the 1.5B to
+   send exactly that string as file content — 4 of 12 trials, and once it
+   started it did it every round. Compaction now runs one turn behind: the
+   newest assistant turn is always verbatim.
+15. **A failing write has to count as a repeat.** The repeat record was cleared
+   on any write, so a write that failed was never a repeat and the 0.6B sent
+   the same 132 bytes of `onclick='alert('hi')'` eight times. It is cleared
+   only when a write succeeds.
+16. **A refusal that hands over the file must record that as a read**, or the
+   retry is refused again and the turn spends every round being handed the same
+   file. And it must say the change still has to be made: "Here it is. Write it
+   again in full" got the file echoed back byte-for-byte with nothing changed,
+   which is why a write that changes nothing is now itself refused.
+17. **A tool result is a prompt.** Two measured failures were pure wording:
+   "Call read_file and copy the exact text" while the file was attached to the
+   same message, and an edit-miss that never said the content was in `result`.
+   Both had models re-sending an identical failing call until the repeat guard
+   stopped them.
+18. **`edit_file` misses are usually not a matching problem.** The 1.5B edits
+   `<header>` in a page whose header is `<header class="site-header">`; the 7B
+   invents `/* Add your styles here */` for a stylesheet it never read. Four
+   passes of decreasing strictness (exact, spacing, packing, prettier-formatted)
+   cover the formatting differences; the rest is answered by naming the closest
+   line and attaching the file.
+19. **A trial can be lost to a page reload that is nobody's fault.** Neither
+   Vite (a root markdown edit does not reload — measured) nor a reported crash.
+   The harness retries such a step once and records it as `void`, out of the
+   pass rate, so the machine's bad minute does not land in the model's column.
+20. Still true from earlier: `resolve/main/` in local records, JSON 404 for
    mirror misses, absolute same-origin URLs, `user` + `<tool_response>` for
    Qwen, no `baseUrl`, no `models/` in `public/`, `.cdp-profile/` and
    `models/` ignored by Vite's watcher.
@@ -240,17 +352,33 @@ Decisions these numbers settled:
   installed to a home screen.
 - Continue (`finish_reason === "length"`) was never triggered by a harness
   prompt.
+- The formatter has never run against a page large enough to be slow; the
+  measured cost is 1–13 ms, on pages of one to six kilobytes.
+- The prettier chunks are in the precache manifest (they match `\.js$`), so the
+  offline shell downloads ~264 KB more on install than it did. Nothing has been
+  measured about that install.
 - The stacked layout was checked by screenshot at 390 and 760 px, not on a
   device; the model menu and the editor were not tried on touch.
 
 ## Next
 
-1. **First deploy.** Merge to `main`, confirm `name` in `wrangler.jsonc` matches
-   the connected Worker, set `GA_MEASUREMENT_ID`, then re-check on the live
-   origin: the `_headers` actually applied, the service worker registering on a
-   clean origin (no prior registration, so no "Update ready" on a first visit),
-   and one cold model load straight from Hugging Face — the path nothing has
-   ever measured.
+1. **Settle `edit_file` by model size.** The 0.6B is worse with it in the list
+   (4/10 vs 7/10 on `m3`, n=10, before later fixes); the 7B reaches for it first
+   and now passes `sticky` 2/3 with it. Run `--scenario m3 --variant
+   baseline,no-edit --trials 30` and `--scenario sticky --variant
+   baseline,no-edit --trials 8 --model …7B…`; if both hold, gate the default
+   tool list on parameter count the way model selection already does.
+2. **Measure the variants nothing has numbers for**: `no-verify`, `no-compact`,
+   `no-inventory`, `bare`, `single-file`. Each is a default this session chose on
+   reasoning plus one or two trials, which is not the standard the rest of the
+   repo holds itself to.
+3. **`sticky` on the 1.5B is 0/6** and worth understanding: it rewrites
+   `index.html` instead of touching the stylesheet, and the new used-but-unstyled
+   finding was added for exactly that but has not been measured at n≥6 since.
+4. **The intermittent page reload is still unexplained** (landmine 3) and still
+   costs trials — now visible as `VOID` rather than as a mysterious failure. It
+   reproduced during a 7B run with nothing else loaded, so the "another Chrome
+   had a model in GPU memory" theory is dead.
 2. **The initial payload is 2.3 MB gzipped and ships twice.** `@mlc-ai/web-llm`
    is imported on the main thread (engine + `prebuiltAppConfig`) and again in
    the worker chunk, so a first visit downloads ~4.6 MB of JavaScript before
@@ -275,4 +403,5 @@ Decisions these numbers settled:
    create/delete in the editor, cancelling a model load (WebLLM has no cancel;
    `unload()` after). Do not add "open preview in a new tab": a blob URL
    escapes the opaque origin.
-6. `chatPrompt` in `src/llm/prompts.ts` is unused.
+6. `chatPrompt` was unused and is gone; `isPageBuilderModel` went with it when
+   the project checks replaced the stylesheet special case.

@@ -5,7 +5,6 @@ import {
   classifyFit,
   createModelCatalog,
   FAST_MODEL_ID,
-  isPageBuilderModel,
   LOCAL_SUFFIX,
   recommendModels,
   SMART_MODEL_ID,
@@ -217,16 +216,5 @@ describe('recommendModels and chooseDefaultModel', () => {
     expect(chooseDefaultModel(models, device, new Set())?.baseId).toBe(SMART_MODEL_ID)
     // An id that is not in the catalog must not strand the picker on nothing.
     expect(chooseDefaultModel(models, device, new Set(), 'no-such-model')).toBeDefined()
-  })
-})
-
-describe('isPageBuilderModel', () => {
-  it('recognises models large enough to keep a two-file project, local or remote', () => {
-    expect(isPageBuilderModel([`${SMART_MODEL_ID}${LOCAL_SUFFIX}`])).toBe(true)
-    expect(isPageBuilderModel([STEP_UP_MODEL_ID])).toBe(true)
-    expect(isPageBuilderModel(['Llama-3.2-3B-Instruct-q4f16_1-MLC'])).toBe(true)
-    expect(isPageBuilderModel([`${FAST_MODEL_ID}${LOCAL_SUFFIX}`])).toBe(false)
-    expect(isPageBuilderModel(['SmolLM2-360M-Instruct-q4f16_1-MLC'])).toBe(false)
-    expect(isPageBuilderModel(undefined)).toBe(false)
   })
 })

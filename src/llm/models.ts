@@ -25,19 +25,10 @@ const CONTEXT_OVERRIDES: Record<string, number> = {
   [STEP_UP_MODEL_ID]: 8_192,
 }
 
-// The stylesheet guard in the agent exists because the 0.6B rewrites index.html wholesale and
-// never links styles.css, while the 1.5B and 7B coders keep the two-file shape. Parameter count
-// is what separates them, and it is the only thing a 163-model catalog can read off an id.
+// The 0.6B rewrites index.html wholesale and never keeps a stylesheet, while the 1.5B and 7B
+// coders hold the two-file shape. Parameter count is what separates them, and it is the only
+// thing a 163-model catalog can read off an id.
 const PAGE_BUILDER_MIN_PARAMS_B = 1.2
-
-export function isPageBuilderModel(loadedIds: string[] | undefined): boolean {
-  return (
-    loadedIds?.some((id) => {
-      const params = parseModelId(id.replace(LOCAL_SUFFIX, '')).paramsB
-      return params !== undefined && params >= PAGE_BUILDER_MIN_PARAMS_B
-    }) ?? false
-  )
-}
 
 export type ModelSource = 'local' | 'network'
 export type ModelRole = 'coder' | 'reasoning' | 'vision' | 'math'

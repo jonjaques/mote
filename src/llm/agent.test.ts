@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { projectFS } from '@/sandbox/fs'
 
+import { resetAgentConfig, setAgentConfig } from './config'
+import { getLastTranscript } from './transcript'
+
 const create = vi.fn()
 const engine = {
   modelId: ['Qwen3-0.6B-q4f16_1-MLC (local)'],
@@ -24,7 +27,7 @@ vi.mock('@/sandbox/runtime', () => ({
   },
 }))
 
-const { runAgent } = await import('./agent')
+const { compactAssistantTurn, runAgent } = await import('./agent')
 type Messages = Array<{ role: string; content: string }>
 
 function reply(text: string, finishReason: 'stop' | 'length' = 'stop') {
@@ -54,6 +57,7 @@ describe('runAgent', () => {
     callbacks.onTool.mockReset()
     engine.modelId = ['Qwen3-0.6B-q4f16_1-MLC (local)']
     projectFS.reset()
+    resetAgentConfig()
   })
 
   it('sends the page-builder prompt with structural tags and the agreed sampling options', async () => {
@@ -117,12 +121,13 @@ describe('runAgent', () => {
 
     expect(create).toHaveBeenCalledTimes(1)
     expect(result).toMatchObject({ content: 'Updated index.html and reloaded the preview.', cutOff: false, rounds: 1 })
-    expect(projectFS.read('index.html')).toBe('<p>blue</p>')
+    expect(projectFS.read('index.html')).toBe('<p>blue</p>\n')
     expect(callbacks.onText).toHaveBeenLastCalledWith('Updated index.html and reloaded the preview.')
   })
 
-  it('keeps going when the smart model links styles.css without writing it', async () => {
-    engine.modelId = ['Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC (local)']
+  // Was a model-family special case in the loop; it is now one of the project checks, so it
+  // applies to whichever model leaves a page pointing at a stylesheet it never wrote.
+  it('keeps going when a page links styles.css and leaves it as the starter file', async () => {
     create
       .mockImplementationOnce(async () =>
         reply(toolCall('write_file', { path: 'index.html', content: '<link rel="stylesheet" href="styles.css">' })),
@@ -132,7 +137,8 @@ describe('runAgent', () => {
 
     expect(create).toHaveBeenCalledTimes(2)
     expect(result).toMatchObject({ content: 'Updated styles.css and reloaded the preview.', cutOff: false, rounds: 2 })
-    expect(projectFS.read('styles.css')).toBe('body{margin:0}')
+    expect(projectFS.read('styles.css')).toBe('body {\n  margin: 0;\n}\n')
+    expect(getLastTranscript()?.rounds[0].findings?.[0]).toMatch(/index.html references styles.css/)
   })
 
   it('runs a call as soon as its block closes, before the stream ends', async () => {
@@ -148,7 +154,7 @@ describe('runAgent', () => {
       })(),
     )
     const result = await runAgent('build', [], callbacks)
-    expect(seen).toEqual(['<p>eager</p>'])
+    expect(seen).toEqual(['<p>eager</p>\n'])
     expect(result).toMatchObject({ content: 'Updated index.html and reloaded the preview.', rounds: 1 })
   })
 
@@ -163,7 +169,7 @@ describe('runAgent', () => {
     const result = await runAgent('build', [], callbacks)
     expect(create).toHaveBeenCalledTimes(1)
     expect(result).toMatchObject({ stopped: true, content: 'Stopped.' })
-    expect(projectFS.read('index.html')).toBe('<p>kept</p>')
+    expect(projectFS.read('index.html')).toBe('<p>kept</p>\n')
     expect(callbacks.onTool).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'complete' }))
   })
 
@@ -194,7 +200,7 @@ describe('runAgent', () => {
     expect(create).toHaveBeenCalledTimes(3)
     expect(callbacks.onTool).toHaveBeenCalledTimes(2)
     // The loop mutates one messages array, so inspect it for the nudge rather than its tail.
-    const nudges = messagesOfCall(2).filter((message) => message.content.includes('already made this call'))
+    const nudges = messagesOfCall(2).filter((message) => message.content.includes('already made this exact call'))
     expect(nudges).toHaveLength(1)
     expect(nudges[0]?.role).toBe('user')
     expect(result.rounds).toBe(3)
@@ -229,6 +235,115 @@ describe('runAgent', () => {
     expect(messagesOfCall(1).at(-1)?.content).toContain('could not be parsed')
   })
 
+
+  it('takes its sampling and round budget from the agent config', async () => {
+    setAgentConfig({ temperature: 0.9, maxTokens: 512, maxRounds: 2, requireFirstCall: false, tools: ['run_js'] })
+    create.mockImplementation(async () => reply(toolCall('run_js', { code: `return ${Math.random()}` })))
+    const result = await runAgent('loop', [], callbacks)
+
+    const request = create.mock.calls[0][0]
+    expect(request).toMatchObject({ temperature: 0.9, max_tokens: 512 })
+    expect(request.response_format.structural_tag.format.at_least_one).toBe(false)
+    expect(request.response_format.structural_tag.format.tags).toHaveLength(2)
+    expect(request.messages[0].content).not.toContain('write_file {')
+    expect(create).toHaveBeenCalledTimes(2)
+    expect(result.rounds).toBe(2)
+  })
+
+  it('reads a file and edits it in place', async () => {
+    projectFS.write('styles.css', 'body {\n  margin: 0;\n}\n')
+    create
+      .mockImplementationOnce(async () => reply(toolCall('read_file', { path: 'styles.css' })))
+      .mockImplementationOnce(async () =>
+        reply(toolCall('edit_file', { path: 'styles.css', old_text: 'margin: 0;', new_text: 'margin: 2rem;' })),
+      )
+    const result = await runAgent('add some breathing room', [], callbacks)
+
+    expect(projectFS.read('styles.css')).toBe('body {\n  margin: 2rem;\n}\n')
+    expect(result.content).toBe('Updated styles.css and reloaded the preview.')
+  })
+
+  // One round of findings, not a debate: a model that ignores the note has already been told,
+  // and every extra round on the 7B is another minute.
+  it('reports project findings once and then accepts the round', async () => {
+    const page = (body: string) =>
+      toolCall('write_file', { path: 'index.html', content: `<!doctype html><html><body>${body}</body></html>` })
+    const sheet = toolCall('write_file', { path: 'styles.css', content: '.sticky { position: sticky; top: 0; }' })
+    create
+      .mockImplementationOnce(async () => reply(`${page('<h1>One</h1>')}\n${sheet}`))
+      .mockImplementationOnce(async () => reply(page('<h1>Two</h1>')))
+      .mockImplementationOnce(async () => reply(page('<h1>Three</h1>')))
+    const result = await runAgent('make the header sticky', [], callbacks)
+
+    expect(create).toHaveBeenCalledTimes(2)
+    const findings = messagesOfCall(1).filter((message) => message.content.includes('.sticky'))
+    expect(findings.at(-1)?.content).toMatch(/no element in index.html carries that class/)
+    expect(result.content).toBe('Updated index.html and reloaded the preview.')
+    expect(getLastTranscript()?.rounds[0].findings).toHaveLength(1)
+  })
+
+  // Compaction runs one turn behind: the newest assistant turn is what a small model imitates,
+  // and a compacted one taught the 1.5B to write `<1177 characters, sent>` into a real file.
+  it('leaves the newest assistant turn verbatim and compacts the one before it', async () => {
+    const first = `return ${'a'.repeat(400)}`
+    const second = `return ${'b'.repeat(400)}`
+    create
+      .mockImplementationOnce(async () => reply(toolCall('run_js', { code: first })))
+      .mockImplementationOnce(async () => reply(toolCall('run_js', { code: second })))
+      .mockImplementationOnce(async () => reply('Done.'))
+    await runAgent('look at the page', [], callbacks)
+
+    const sent = messagesOfCall(2).filter((message) => message.role === 'assistant')
+    expect(sent).toHaveLength(2)
+    expect(sent[0].content).toContain('<407 characters, sent>')
+    expect(sent[0].content).not.toContain(first)
+    expect(sent[1].content).toContain(second)
+  })
+
+  it('replaces file payloads in the history it sends back', async () => {
+    const long = 'x'.repeat(400)
+    const raw = `Writing.\n${toolCall('write_file', { path: 'index.html', content: long })}\ndone`
+    const compacted = compactAssistantTurn(raw)
+    expect(compacted).toContain('"content":"<400 characters, sent>"')
+    expect(compacted).toContain('"path":"index.html"')
+    expect(compacted.startsWith('Writing.\n<tool_call>')).toBe(true)
+    expect(compacted.endsWith('</tool_call>\ndone')).toBe(true)
+    expect(compacted).not.toContain(long)
+    // A short payload is left exactly as the model wrote it.
+    const short = toolCall('read_file', { path: 'index.html' })
+    expect(compactAssistantTurn(short)).toBe(short)
+  })
+
+
+  // A write that fails is answered by the same 132 bytes forever unless it counts as a repeat.
+  // Measured: a 0.6B sent `onclick='alert('hi')'` eight times before the round cap stopped it.
+  it('treats an identical failing write as a repeat', async () => {
+    const broken = toolCall('write_file', { path: 'app.js', content: 'function f( {' })
+    create.mockImplementation(async () => reply(broken))
+    const result = await runAgent('add a button', [], callbacks)
+
+    expect(create).toHaveBeenCalledTimes(3)
+    expect(result.rounds).toBe(3)
+    expect(callbacks.onTool.mock.calls.filter(([a]) => a.status === 'error')).toHaveLength(1)
+  })
+
+  it('clears the repeat record once a write succeeds', async () => {
+    create
+      .mockImplementationOnce(async () => reply(toolCall('list_files', {})))
+      // A page that links a file nobody wrote: the write lands, the findings round continues.
+      .mockImplementationOnce(async () =>
+        reply(toolCall('write_file', { path: 'index.html', content: '<link rel="stylesheet" href="theme.css">' })),
+      )
+      .mockImplementationOnce(async () => reply(toolCall('list_files', {})))
+      .mockImplementationOnce(async () => reply('Done.'))
+    const result = await runAgent('look around', [], callbacks)
+
+    // list_files is asked twice with a successful write between them, so it is not a repeat.
+    expect(create).toHaveBeenCalledTimes(4)
+    expect(callbacks.onTool.mock.calls.filter(([a]) => a.status === 'complete' && a.call.name === 'list_files')).toHaveLength(2)
+    expect(result.content).toBe('Done.')
+  })
+
   it('gives up after eight rounds of tool calls', async () => {
     // Distinct arguments every round so the repeat guard does not end the loop early.
     let n = 0
@@ -236,6 +351,6 @@ describe('runAgent', () => {
     const result = await runAgent('loop', [], callbacks)
     expect(create).toHaveBeenCalledTimes(8)
     expect(result.rounds).toBe(8)
-    expect(result.content).toMatch(/eight-round/)
+    expect(result.content).toMatch(/8-round safety limit/)
   })
 })

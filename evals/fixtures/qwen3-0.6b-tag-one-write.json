@@ -1,0 +1,68 @@
+{
+  "scenario": "blue",
+  "variant": "baseline",
+  "model": "Qwen3-0.6B-q4f16_1-MLC",
+  "pass": true,
+  "checks": {
+    "ran": true,
+    "wrote": true,
+    "blue": true,
+    "clean": true
+  },
+  "transcript": {
+    "id": "run-1788414625027-vup0u6",
+    "startedAt": 1788414625027,
+    "input": "make the background blue",
+    "model": "Qwen3-0.6B-q4f16_1-MLC (local)",
+    "config": {
+      "temperature": 0.2,
+      "maxTokens": 4096,
+      "maxRounds": 8,
+      "requireFirstCall": true,
+      "tools": [
+        "write_file",
+        "edit_file",
+        "read_file",
+        "list_files",
+        "run_js",
+        "get_dom"
+      ],
+      "triggers": [
+        "tag",
+        "fence"
+      ],
+      "formatOnWrite": true,
+      "verifyWrites": true,
+      "compactHistory": true,
+      "refusalIncludesFile": true
+    },
+    "rounds": [
+      {
+        "round": 0,
+        "raw": "<think>\n\n</think>\n\n<tool_call>\n{\"name\":\"write_file\",\"arguments\":{\"path\":\"styles.css\",\"content\":\"body {\\n  background-color: #0077B6;\\n  color: white;\\n  font-family: sans-serif;\\n  text-align: center;\\n  margin: 0;\\n  padding: 0;\\n}\\n\"}}\n</tool_call>",
+        "finishReason": "stop",
+        "promptTokens": 487,
+        "completionTokens": 72,
+        "calls": [
+          {
+            "name": "write_file",
+            "arguments": {
+              "path": "styles.css",
+              "content": "body {\n  background-color: #0077B6;\n  color: white;\n  font-family: sans-serif;\n  text-align: center;\n  margin: 0;\n  padding: 0;\n}\n"
+            },
+            "ok": true,
+            "summary": "Wrote styles.css (130 bytes)."
+          }
+        ],
+        "parseErrors": []
+      }
+    ],
+    "outcome": {
+      "content": "Updated styles.css and reloaded the preview.",
+      "rounds": 1,
+      "cutOff": false,
+      "stopped": false,
+      "seconds": 1.436
+    }
+  }
+}

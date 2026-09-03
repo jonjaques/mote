@@ -8,6 +8,7 @@ import { javascript } from '@codemirror/lang-javascript'
 import { tags } from '@lezer/highlight'
 
 import { Button } from '@/components/ui/button'
+import { formatProjectFile } from '@/llm/format'
 import { listProjectFiles, projectFS } from '@/sandbox/fs'
 import { useAppState } from '@/state'
 
@@ -124,19 +125,33 @@ export function FilesView() {
     setEditing({ path: selectedPath, base: savedContent, draft: savedContent })
   }
   const draft = editing.path === selectedPath && editing.base === savedContent ? editing.draft : savedContent
-  const setDraft = (value: string) => setEditing({ path: selectedPath, base: savedContent, draft: value })
+  const setDraft = (value: string) => {
+    setEditing({ path: selectedPath, base: savedContent, draft: value })
+    // A parse error belongs to the text that produced it; typing makes it stale.
+    setSaveError(undefined)
+  }
   const dirty = draft !== savedContent
   const extensions = extensionsFor(selectedPath)
+  // Held per file and cleared on the next keystroke: a parse error must not outlive the text
+  // that caused it, and switching files must not carry it along.
+  const [saveError, setSaveError] = useState<{ path: string; message: string }>()
 
-  function save() {
+  // The same formatter the write_file tool runs, for the same two reasons: a hand-edited file
+  // should not be the one file in the project that is not formatted, and a save is the moment
+  // to be told the stylesheet has an unclosed block. Broken text is still saved — refusing it
+  // would silently discard what someone typed.
+  async function save() {
     if (!selected || !dirty) return
-    projectFS.write(selected.path, draft)
+    const path = selected.path
+    const result = await formatProjectFile(path, draft)
+    projectFS.write(path, result.content)
+    setSaveError(result.error ? { path, message: result.error } : undefined)
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if ((event.metaKey || event.ctrlKey) && event.key === 's') {
       event.preventDefault()
-      save()
+      void save()
     }
   }
 
@@ -187,12 +202,17 @@ export function FilesView() {
               <RotateCcw />
               Discard
             </Button>
-            <Button size="xs" onClick={save} disabled={!dirty} title="Save and reload the preview (⌘S)">
+            <Button size="xs" onClick={() => void save()} disabled={!dirty} title="Format, save and reload the preview (⌘S)">
               <Save />
               Save
             </Button>
           </div>
         </header>
+        {saveError?.path === selectedPath && (
+          <p className="file-save-error" role="status">
+            Saved unformatted: {saveError.message}
+          </p>
+        )}
         {selected && (
           <CodeMirror
             className="file-editor"

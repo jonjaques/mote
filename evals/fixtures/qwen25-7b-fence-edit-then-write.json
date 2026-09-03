@@ -1,0 +1,91 @@
+{
+  "scenario": "sticky",
+  "variant": "baseline",
+  "model": "Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC",
+  "pass": true,
+  "checks": {
+    "ran": true,
+    "wrote": true,
+    "pinned": true,
+    "kept the form": true,
+    "kept the menu": true,
+    "clean": true
+  },
+  "transcript": {
+    "id": "run-1788416624581-zxcwnc",
+    "startedAt": 1788416624581,
+    "input": "make the header sticky",
+    "model": "Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC (local)",
+    "config": {
+      "temperature": 0.2,
+      "maxTokens": 4096,
+      "maxRounds": 8,
+      "requireFirstCall": true,
+      "tools": [
+        "write_file",
+        "edit_file",
+        "read_file",
+        "list_files",
+        "run_js",
+        "get_dom"
+      ],
+      "triggers": [
+        "tag",
+        "fence"
+      ],
+      "formatOnWrite": true,
+      "verifyWrites": true,
+      "compactHistory": true,
+      "refusalIncludesFile": true,
+      "projectInventory": true
+    },
+    "rounds": [
+      {
+        "round": 0,
+        "raw": "<think>\n\n</think>\n\n```json\n{\"name\":\"edit_file\",\"arguments\":{\"path\":\"styles.css\",\"old_text\":\"\",\"new_text\":\"header {\\n  position: sticky;\\n  top: 0;\\n  background-color: #f8f9fa;\\n  z-index: 1000;\\n}\\n\"}}\n```\n\nThe header is now set to be sticky.",
+        "finishReason": "stop",
+        "promptTokens": 528,
+        "completionTokens": 75,
+        "calls": [
+          {
+            "name": "edit_file",
+            "arguments": {
+              "path": "styles.css",
+              "old_text": "",
+              "new_text": "header {\n  position: sticky;\n  top: 0;\n  background-color: #f8f9fa;\n  z-index: 1000;\n}\n"
+            },
+            "ok": false,
+            "summary": "“old_text” must not be empty. Use write_file to create a file."
+          }
+        ],
+        "parseErrors": []
+      },
+      {
+        "round": 1,
+        "raw": "<think>\n\n</think>\n\n```json\n{\"name\":\"write_file\",\"arguments\":{\"path\":\"styles.css\",\"content\":\"header {\\n  position: sticky;\\n  top: 0;\\n  background-color: #f8f9fa;\\n  z-index: 1000;\\n}\\n\\n/* Existing styles.css content */\\n:root { color-scheme: light; --ink: #241c17; --paper: #fbf7f2; }\\n* { box-sizing: border-box; }\\nbody { margin: 0; color: var(--ink); background: var(--paper); font-family: ui-sans-serif, system-ui, sans-serif; }\\n.site-header { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding: 1rem 1.5rem; border-bottom: 1px solid #e2d6c8; }\\n.site-header h1 { margin: 0; font-size: 1.4rem; letter-spacing: -0.02em; }\\nnav a { margin-left: 1rem; color: inherit; }\\nmain { max-width: 46rem; margin: 0 auto; padding: 2rem 1.5rem 4rem; }\\nsection + section { margin-top: 3rem; }\\n.menu-list { margin: 0; padding: 0; list-style: none; }\\n.menu-list li { display: flex; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px dashed #e2d6c8; }\\nform { display: grid; gap: 0.75rem; max-width: 24rem; }\\nlabel { display: grid; gap: 0.25rem; font-size: 0.85rem; }\\ninput, textarea { padding: 0.5rem; border: 1px solid #cbb9a6; background: #fff; font: inherit; }\\nbutton { justify-self: start; padding: 0.6rem 1.2rem; color: var(--paper); background: var(--ink); border: 0; font: inherit; cursor: pointer; }\\n\"}}\n```\n\nThe header is now set to be sticky.",
+        "finishReason": "stop",
+        "promptTokens": 477,
+        "completionTokens": 497,
+        "calls": [
+          {
+            "name": "write_file",
+            "arguments": {
+              "path": "styles.css",
+              "content": "header {\n  position: sticky;\n  top: 0;\n  background-color: #f8f9fa;\n  z-index: 1000;\n}\n\n/* Existing styles.css content */\n:root { color-scheme: light; --ink: #241c17; --paper: #fbf7f2; }\n* { box-sizing: border-box; }\nbody { margin: 0; color: var(--ink); background: var(--paper); font-family: ui-sans-serif, system-ui, sans-serif; }\n.site-header { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding: 1rem 1.5rem; border-bottom: 1px solid #e2d6c8; }\n.site-header h1 { margin: 0; font-size: 1.4rem; letter-spacing: -0.02em; }\nnav a { margin-left: 1rem; color: inherit; }\nmain { max-width: 46rem; margin: 0 auto; padding: 2rem 1.5rem 4rem; }\nsection + section { margin-top: 3rem; }\n.menu-list { margin: 0; padding: 0; list-style: none; }\n.menu-list li { display: flex; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px dashed #e2d6c8; }\nform { display: grid; gap: 0.75rem; max-width: 24rem; }\nlabel { display: grid; gap: 0.25rem; font-size: 0.85rem; }\ninput, textarea { padding: 0.5rem; border: 1px solid #cbb9a6; background: #fff; font: inherit; }\nbutton { justify-self: start; padding: 0.6rem 1.2rem; color: var(--paper); background: var(--ink); border: 0; font: inherit; cursor: pointer; }\n"
+            },
+            "ok": true,
+            "summary": "Wrote styles.css (1342 bytes)."
+          }
+        ],
+        "parseErrors": []
+      }
+    ],
+    "outcome": {
+      "content": "Updated styles.css and reloaded the preview.",
+      "rounds": 2,
+      "cutOff": false,
+      "stopped": false,
+      "seconds": 51.251
+    }
+  }
+}

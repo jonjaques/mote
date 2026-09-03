@@ -163,6 +163,10 @@ export class VirtualFileSystem {
     return listProjectFiles(this.snapshot.files)
   }
 
+  exists(path: string): boolean {
+    return this.files.has(normalizeProjectPath(path))
+  }
+
   read(path: string): string {
     const normalized = normalizeProjectPath(path)
     const content = this.files.get(normalized)

@@ -17,6 +17,9 @@ no API keys, weights cached in the browser.
 - Verify substantive changes with `pnpm build` (`tsc -b && vite build`) and
   `pnpm test` (vitest, happy-dom). `pnpm lint` (oxlint) should add no warnings
   beyond the pre-existing shadcn fast-refresh ones in `src/components/ui`.
+- `pnpm replay` re-runs recorded model output through the tool layer with no
+  GPU. Run it after any change to the scanner, the formatter or a tool result;
+  it is a second, and it catches what hand-written test input cannot.
 - Do not add `models/`, `.cdp-profile/`, `cdp-trace*.json`, `cdp-report*.json`
   or `dist/` to Git. Weights are multi-gigabyte local artifacts.
 - Keep commits small and milestone-oriented. Do not mix opportunistic
@@ -47,8 +50,12 @@ pnpm build && pnpm test
 pnpm models list --filter qwen --max-vram 6000
 pnpm models download <model_id>
 pnpm models verify <model_id>
+pnpm cdp:agent --list                              # scenarios, groups, variants
 pnpm cdp:agent --scenario m3 --trials 10           # M3 acceptance on the fast model
+pnpm cdp:agent --scenario sticky --variant baseline,no-edit --trials 8
 pnpm cdp:agent --scenario coffee --model Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC
+pnpm cdp:agent --scenario edits --compare cdp-report.json --out next.json
+pnpm replay                                        # recorded output, no GPU
 pnpm cdp:trace --url "http://localhost:5180/?model=Qwen3-0.6B-q4f16_1-MLC&autoload=1"
 ```
 
@@ -59,9 +66,13 @@ pnpm cdp:trace --url "http://localhost:5180/?model=Qwen3-0.6B-q4f16_1-MLC&autolo
 | `src/llm/engine.ts` | `WebWorkerMLCEngine` singleton, cache, persist, interrupt |
 | `src/llm/worker.ts` | `WebWorkerMLCEngineHandler` only |
 | `src/llm/models.ts` | catalog, id parsing, device profile, fit classification, load gate |
+| `src/llm/config.ts` | the experiment surface: every knob a variant may patch |
 | `src/llm/tools.ts` | tool schemas, structural tag, block scanner, turn context, run |
+| `src/llm/format.ts` | prettier in the tab: format on write, and the only parser we have |
+| `src/llm/verify.ts` | what the project says about itself after a writing round |
 | `src/llm/agent.ts` | prompt → stream → run blocks as they close → `<tool_response>` loop |
-| `src/llm/prompts.ts` | system prompts |
+| `src/llm/transcript.ts` | raw model output per round, for the harness and the replay suite |
+| `src/llm/prompts.ts` | system prompts, generated from the enabled tools |
 | `src/llm/stream.ts` | per-token buffer of the round being generated |
 | `src/automation.ts` | `window.__llmcoder`: the only surface the CDP harness touches |
 | `src/sandbox/fs.ts` | virtual filesystem singleton, snapshots, persistence |
@@ -71,7 +82,10 @@ pnpm cdp:trace --url "http://localhost:5180/?model=Qwen3-0.6B-q4f16_1-MLC&autolo
 | `src/state.tsx` | the only React store (one reducer + context) |
 | `src/ui/*` | views; they subscribe to the singletons above |
 | `scripts/cdp.mjs` | Chrome launch and CDP session plumbing shared by both harness scripts |
-| `scripts/cdp-agent.mjs` | scenario runner and sandbox probes |
+| `scripts/cdp-agent.mjs` | the runner: model loading, prompts, scoring, reports, comparison |
+| `scripts/eval-scenarios.mjs` | scenarios, fixtures, sandbox probes and named checks |
+| `scripts/eval-variants.mjs` | the arms of an experiment, as config patches |
+| `evals/fixtures/*.json` | curated real transcripts; `src/llm/replay.test.ts` replays them |
 | `src/sw.js` | the service worker source; emitted to `dist/sw.js` by the build |
 | `src/pwa.ts` | registration and the "a new build is waiting" store |
 | `src/analytics.ts` | the only place an analytics event may be sent from |
@@ -187,6 +201,23 @@ React.
   was not read or written this turn (`TurnContext`). Tool payloads never
   enter the chat history, so without this a follow-up replaces a stylesheet
   with the one rule it was asked for. Untouched starter files are exempt.
+  The refusal carries the file with it, which collapses read → write into one
+  round; `refusalIncludesFile` turns that off for a measurement.
+- **Every write is formatted, and formatting is the only parser here.** CSS and
+  JavaScript that cannot be parsed throw with a line and a column, and that
+  becomes a failed tool call the model can act on instead of a broken page it
+  reports as done. HTML is different: prettier repairs mis-nested tags and
+  never raises, but it also leaves an unparseable inline `<script>` alone, so
+  `format.ts` parses those separately and reports the position in whole-file
+  coordinates. The content is stored either way — a refused write would leave
+  `read_file` answering with text the model never sent.
+- A failing write must count as a repeat. Clearing the repeat record on *any*
+  write let a 0.6B send the same 132 bytes of `onclick='alert('hi')'` eight
+  times; the record is cleared only when a write succeeds.
+- After a writing round, `inspectProject` looks for a page that references a
+  file nobody wrote and for classes styled but never applied. Findings go back
+  as one `<tool_response>`, once per turn. This replaced a model-family special
+  case (`smartPageNeedsStyles`) in the loop.
 - A round made only of inspection calls already answered since the last
   write gets one nudge, then the turn stops.
 - Compact tool results. Do not echo full `write_file` contents. Truncate
@@ -197,9 +228,18 @@ React.
 - Surface `finish_reason === "length"` as a Continue action. Stop calls
   `engine.interruptGenerate()`; `finish_reason === "abort"` keeps tools that
   already ran and starts nothing more.
+- The prompt is **generated from the enabled tools** (`describeTools()`), so a
+  tool the grammar accepts is always a tool the prompt documents.
 - The prompt wording is measured, not guessed. A stricter single-file prompt
-  made the 1.5B drop requested sections; change `pageBuilderPrompt` only with
-  `pnpm cdp:agent` numbers before and after.
+  made the 1.5B drop requested sections; change it only with `pnpm cdp:agent`
+  numbers before and after. Two sentences are known to be load-bearing:
+  "You may replace index.html with a full document containing inline CSS and
+  JavaScript" (dropping it took the 0.6B from 9/10 to 0/10 on the alert
+  scenario — it rendered the button and wrote no script), and the tool-call
+  form at the end.
+- **Adding a tool is not free.** `edit_file` in the list costs the 0.6B on
+  one-shot page writes; it is what the 1.5B and 7B need for edits. Measure both
+  ends with `--variant baseline,no-edit` before changing the default.
 
 ## Interface
 
@@ -275,6 +315,14 @@ nothing runs outside the tab; a `main` would be the first step in breaking it.
 - Changes to the engine, agent, tool loop or prompts are verified with
   `pnpm cdp:agent`, which loads a model. Everything else should not load one;
   weights are large and load is slow even from the local mirror.
+- **Measure a change as a variant, not as an edit.** Add an arm to
+  `scripts/eval-variants.mjs`, run `--variant baseline,<arm>`, and read the
+  `what failed` column: it names the checks, so a regression says `alerts ×4`
+  rather than a pass rate. Editing `src/` between arms reloads the page and
+  drops the model, and compares two runs the machine was not the same for.
+- Every run writes raw model output to `evals/transcripts/`. When a run
+  explains something, curate that file into `evals/fixtures/` — `pnpm replay`
+  then guards it forever, in a second, with no GPU.
 - **Do not edit `src/` while a harness run is going.** Vite reloads the page
   under it and the trial is lost. Wait for `report written`.
 - A single screenshot is not verification for UI behavior.

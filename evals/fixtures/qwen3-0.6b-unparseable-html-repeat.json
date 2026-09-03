@@ -1,0 +1,101 @@
+{
+  "scenario": "alert",
+  "variant": "baseline",
+  "model": "Qwen3-0.6B-q4f16_1-MLC",
+  "pass": false,
+  "checks": {
+    "ran": true,
+    "wrote": false
+  },
+  "transcript": {
+    "id": "run-1788416593938-m1dxyj",
+    "startedAt": 1788416593938,
+    "input": "add a button that alerts hi",
+    "model": "Qwen3-0.6B-q4f16_1-MLC (local)",
+    "config": {
+      "temperature": 0.2,
+      "maxTokens": 4096,
+      "maxRounds": 8,
+      "requireFirstCall": true,
+      "tools": [
+        "write_file",
+        "edit_file",
+        "read_file",
+        "list_files",
+        "run_js",
+        "get_dom"
+      ],
+      "triggers": [
+        "tag",
+        "fence"
+      ],
+      "formatOnWrite": true,
+      "verifyWrites": true,
+      "compactHistory": true,
+      "refusalIncludesFile": true,
+      "projectInventory": true
+    },
+    "rounds": [
+      {
+        "round": 0,
+        "raw": "<think>\n\n</think>\n\n<tool_call>\n{\"name\":\"write_file\",\"arguments\":{\"path\":\"index.html\",\"content\":\"<!DOCTYPE html><html lang='en'><head><title>Project</title></head><body><button onclick='alert('hi')'>Hi</button></body></html>\"}}\n</tool_call>",
+        "finishReason": "stop",
+        "promptTokens": 535,
+        "completionTokens": 56,
+        "calls": [
+          {
+            "name": "write_file",
+            "arguments": {
+              "path": "index.html",
+              "content": "<!DOCTYPE html><html lang='en'><head><title>Project</title></head><body><button onclick='alert('hi')'>Hi</button></body></html>"
+            },
+            "ok": false,
+            "summary": "Wrote index.html (127 bytes). It has a syntax error at Opening tag \"button\" not terminated. (1:73) Fix it and write the file again."
+          }
+        ],
+        "parseErrors": []
+      },
+      {
+        "round": 1,
+        "raw": "<think>\n\n</think>\n\n<tool_call>\n{\"name\":\"write_file\",\"arguments\":{\"path\":\"index.html\",\"content\":\"<!DOCTYPE html><html lang='en'><head><title>Project</title></head><body><button onclick='alert('hi')'>Hi</button></body></html>\"}}\n</tool_call>",
+        "finishReason": "stop",
+        "promptTokens": 82,
+        "completionTokens": 56,
+        "calls": [
+          {
+            "name": "write_file",
+            "arguments": {
+              "path": "index.html",
+              "content": "<!DOCTYPE html><html lang='en'><head><title>Project</title></head><body><button onclick='alert('hi')'>Hi</button></body></html>"
+            }
+          }
+        ],
+        "parseErrors": []
+      },
+      {
+        "round": 2,
+        "raw": "<think>\n\n</think>\n\n<tool_call>\n{\"name\":\"write_file\",\"arguments\":{\"path\":\"index.html\",\"content\":\"<!DOCTYPE html><html lang='en'><head><title>Project</title></head><body><button onclick='alert('hi')'>Hi</button></body></html>\"}}\n</tool_call>",
+        "finishReason": "stop",
+        "promptTokens": 60,
+        "completionTokens": 56,
+        "calls": [
+          {
+            "name": "write_file",
+            "arguments": {
+              "path": "index.html",
+              "content": "<!DOCTYPE html><html lang='en'><head><title>Project</title></head><body><button onclick='alert('hi')'>Hi</button></body></html>"
+            }
+          }
+        ],
+        "parseErrors": []
+      }
+    ],
+    "outcome": {
+      "content": "Stopped: the model kept repeating tool calls without changing the project.",
+      "rounds": 3,
+      "cutOff": false,
+      "stopped": false,
+      "seconds": 2.867
+    }
+  }
+}

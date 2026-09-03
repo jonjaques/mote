@@ -1,5 +1,12 @@
 import type { AgentStats, AgentToolActivity } from '@/llm/agent'
+import {
+  getAgentConfig,
+  resetAgentConfig,
+  setAgentConfig,
+  type AgentConfig,
+} from '@/llm/config'
 import { interruptGeneration } from '@/llm/engine'
+import { clearTranscripts, getTranscripts, type Transcript } from '@/llm/transcript'
 import { projectFS } from '@/sandbox/fs'
 import { sandboxBridge, type SandboxConsoleEntry, type SandboxResponse } from '@/sandbox/runtime'
 import type { ChatMessage } from '@/state'
@@ -39,10 +46,21 @@ export interface AutomationApi extends AutomationStatus {
   getMessages(): ChatMessage[]
   clearChat(): void
   getProject(): Record<string, string>
+  /** Install a whole project at once, so a scenario can start from a fixed page. */
+  setProject(files: Record<string, string>): Promise<void>
   resetProject(): Promise<void>
   seedProject(): Promise<void>
   runInSandbox(code: string): Promise<SandboxResponse>
   getConsole(): SandboxConsoleEntry[]
+  // The experiment surface. `pnpm cdp:agent --variant` patches the agent between steps rather
+  // than editing `src/`, which would reload the page and drop a model that took a minute to
+  // put on the GPU. See `src/llm/config.ts`.
+  getConfig(): AgentConfig
+  setConfig(patch: Partial<AgentConfig>): AgentConfig
+  resetConfig(): AgentConfig
+  /** Raw model output per round for the last runs, newest last. */
+  getTranscripts(): Transcript[]
+  clearTranscripts(): void
 }
 
 declare global {
@@ -77,6 +95,12 @@ const api: AutomationApi = {
   getProject() {
     return Object.fromEntries(projectFS.list().map((file) => [file.path, file.content]))
   },
+  setProject(files) {
+    return replaceProject(() => {
+      projectFS.reset()
+      for (const [path, content] of Object.entries(files)) projectFS.write(path, content)
+    })
+  },
   resetProject() {
     return replaceProject(() => projectFS.reset())
   },
@@ -89,6 +113,11 @@ const api: AutomationApi = {
   getConsole() {
     return sandboxBridge.getConsoleEntries()
   },
+  getConfig: getAgentConfig,
+  setConfig: setAgentConfig,
+  resetConfig: resetAgentConfig,
+  getTranscripts,
+  clearTranscripts,
 }
 
 window.__llmcoder = api

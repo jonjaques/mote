@@ -28,3 +28,7 @@ models/
 .cdp-profile/
 cdp-trace*.json
 cdp-report*.json
+
+# Raw model output from every harness run. The few worth keeping are curated by hand into
+# evals/fixtures/, which the replay suite reads.
+evals/transcripts/

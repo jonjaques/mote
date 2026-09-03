@@ -1449,6 +1449,17 @@
   gap: 0.25rem;
 }
 
+/* The formatter could not parse what was saved. Stated where the save happened rather than in
+   the console tab, which is for the sandbox's own output. */
+.file-save-error {
+  margin: 0;
+  padding: 0.4rem 0.65rem;
+  color: color-mix(in oklch, var(--destructive), white 18%);
+  background: color-mix(in oklch, var(--destructive), transparent 90%);
+  border-bottom: 1px solid color-mix(in oklch, var(--destructive), transparent 55%);
+  font: 0.68rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 .file-actions button {
   text-transform: none;
   letter-spacing: normal;
