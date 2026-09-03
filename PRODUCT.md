@@ -42,8 +42,8 @@ The emotional core: **a surprisingly powerful machine, reduced to a mote.**
 
 ## Operating Context
 
-- Reached at **https://mote.jonjaques.com**, a static Cloudflare Pages deploy built from
-  `main` on GitHub. First visit means downloading **hundreds of megabytes to gigabytes of
+- Reached at **https://mote.jonjaques.com**, a static Cloudflare Workers deploy (assets only,
+  no Worker entry point) built from `main` on GitHub. First visit means downloading **hundreds of megabytes to gigabytes of
   weights from Hugging Face** onto an unknown GPU. That cold start is not a loading screen to be
   hidden — for this audience it is a substantial share of the total time on the page, and
   the most fragile part of the demo.
@@ -86,7 +86,7 @@ is trying to prove.
 
 Settled since:
 
-- **Deploy target: Cloudflare Pages at `mote.jonjaques.com`, built from `main`.** The local
+- **Deploy target: Cloudflare Workers static assets at `mote.jonjaques.com`, from `main`.** The local
   mirror does not ship — `loadLocalRecords()` is gated on `import.meta.env.DEV`, so a
   deployed visitor is always served from Hugging Face.
 - **A visitor is offered the whole prebuilt catalogue, filed by what their device can hold.**

@@ -8,8 +8,8 @@ is true on disk right now, what was measured, and what to do next.
 ## Snapshot
 
 - Branch `prod-hardening` off `main`, no remote yet. The repo is about to be
-  pushed to GitHub and deployed to **Cloudflare Pages** from `main`, at
-  `https://mote.jonjaques.com`. Package manager **pnpm**.
+  pushed to GitHub and deployed to **Cloudflare Workers static assets** from
+  `main`, at `https://mote.jonjaques.com`. Package manager **pnpm**.
 - `pnpm build` (tsc + vite), `pnpm test` (vitest, 61 tests) and `pnpm lint`
   (only the pre-existing shadcn fast-refresh warnings) are green. The build was
   also run on Node 22.23.2, which is what `.node-version` pins for the deploy.
@@ -233,7 +233,7 @@ Decisions these numbers settled:
   the local mirror. The deployed path is exactly the unmeasured one.
 - The service worker, the offline shell and the update swap were verified
   against `vite preview` on this machine, not against Cloudflare's edge. The
-  `_headers` file has never been applied by Pages.
+  `_headers` file has never been applied by a real deploy.
 - No model has been loaded from a device without `shader-f16`, so the "blocked"
   tier is reasoned from the quantisation, not observed.
 - The PWA was checked as installable (manifest, icons, scope) but never actually
@@ -245,8 +245,8 @@ Decisions these numbers settled:
 
 ## Next
 
-1. **First deploy.** Push to GitHub, point Cloudflare Pages at `main` with
-   `pnpm build` / `dist`, set `GA_MEASUREMENT_ID`, then re-check on the live
+1. **First deploy.** Merge to `main`, confirm `name` in `wrangler.jsonc` matches
+   the connected Worker, set `GA_MEASUREMENT_ID`, then re-check on the live
    origin: the `_headers` actually applied, the service worker registering on a
    clean origin (no prior registration, so no "Update ready" on a first visit),
    and one cold model load straight from Hugging Face — the path nothing has

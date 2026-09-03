@@ -78,8 +78,8 @@ function serveModels(): Plugin {
 
 // Google Analytics, injected into the built index.html and nowhere else.
 //
-// The id comes from the build environment — Cloudflare Pages exposes project variables to the
-// build command as plain env vars, so `GA_MEASUREMENT_ID` needs no VITE_ prefix to be readable
+// The id comes from the build environment — Cloudflare Workers Builds exposes project variables
+// to the build command as plain env vars, so `GA_MEASUREMENT_ID` needs no VITE_ prefix to be readable
 // here (the prefixed name is accepted too, for a local `.env`). Without it the build emits no
 // tag, no request to googletagmanager.com, and no third-party script: dev, `vite preview` and
 // any deploy that has not set the variable are all analytics-free by construction.

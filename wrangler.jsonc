@@ -1,0 +1,29 @@
+{
+  // Cloudflare Workers Builds runs `wrangler versions upload` (or `deploy` on the production
+  // branch) after `pnpm build`, and wrangler reads this file to learn what to upload. Without
+  // it the deploy fails with "Missing entry-point to Worker script or to assets directory",
+  // which is what happened before this file existed.
+  //
+  // `name` must match the Worker this repository is connected to in the Cloudflare dashboard.
+  "name": "mote",
+
+  "compatibility_date": "2026-09-03",
+
+  // No `main`. There is no server-side code here and there is not going to be: Mote's one
+  // inviolable claim is that nothing runs outside the tab, so this Worker exists only to hand
+  // over static files. Adding an entry point would be the first step in breaking that.
+  "assets": {
+    "directory": "./dist",
+
+    // `not_found_handling` is deliberately left at its default of "none", so an unknown path
+    // 404s instead of being answered with index.html. The single-page-application setting is
+    // the reflex for a Vite build, and it is the wrong one here: this app has exactly one
+    // route, and a 200 HTML body served under a missing `/models/...` path is precisely the
+    // failure that poisons the WebLLM cache (a shell cached as mlc-chat-config.json, then
+    // "Unexpected token '<'" on every later load). See AGENTS.md.
+    //
+    // `_headers` is not configured here — Workers parses `dist/_headers` natively and it takes
+    // precedence over Cloudflare's defaults. It arrives there from `public/_headers`, which
+    // Vite copies verbatim.
+  }
+}

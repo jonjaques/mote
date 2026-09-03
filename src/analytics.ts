@@ -1,9 +1,9 @@
 // Analytics — the thin side of a Google Analytics tag.
 //
 // The tag itself is injected into index.html at build time by `analytics()` in vite.config.ts,
-// and only when GA_MEASUREMENT_ID is set in the build environment (Cloudflare Pages). A dev
-// build, a preview build and any deploy without that variable ship no tag at all, which is why
-// every call here goes through an optional `window.gtag` and does nothing when it is absent.
+// and only when GA_MEASUREMENT_ID is set in the build environment (Cloudflare Workers Builds).
+// A dev build, a preview build and any deploy without that variable ship no tag at all, which
+// is why every call here goes through an optional `window.gtag` and does nothing when absent.
 //
 // What may be sent: which model was loaded, whether its weights came from the cache, how long
 // a load or a turn took, and how a turn ended. What must never be sent: prompt text, model

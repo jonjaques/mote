@@ -1,6 +1,7 @@
-# Cloudflare Pages response headers. Not shipped as an asset — Pages reads this file at
-# deploy time and applies it at the edge. Rules are matched in order; every matching block
-# is applied.
+# Response headers for Cloudflare Workers static assets. Vite copies this file from public/
+# into dist/, which is the assets directory wrangler.jsonc points at; Workers parses it there
+# rather than serving it, and what it sets takes precedence over Cloudflare's own defaults.
+# Rules are matched in order; every matching block is applied.
 #
 # Why there is no script-src here, which is the directive a CSP is usually written for:
 # a policy delivered on the host document is inherited by srcdoc children, and Mote's

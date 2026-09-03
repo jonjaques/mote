@@ -77,7 +77,8 @@ pnpm cdp:trace --url "http://localhost:5180/?model=Qwen3-0.6B-q4f16_1-MLC&autolo
 | `src/analytics.ts` | the only place an analytics event may be sent from |
 | `assets/*` | brand sources; `pnpm assets` renders them into `public/` |
 | `scripts/render-assets.mjs` | headless-Chrome rasteriser for those sources |
-| `public/_headers` | Cloudflare Pages response headers |
+| `public/_headers` | response headers for the deployed static assets |
+| `wrangler.jsonc` | what Cloudflare Workers Builds uploads, and under what name |
 
 Do not introduce a store library. Do not duplicate file or console state in
 React.
@@ -220,13 +221,21 @@ React.
 
 ## Production build and deploy
 
-Cloudflare Pages, from `main`, at `https://mote.jonjaques.com`. Build `pnpm build`,
-output `dist`, Node pinned by `.node-version` (verified on 22.23.2), pnpm by
-`packageManager`.
+**Cloudflare Workers with static assets** — not Pages — built from `main` at
+`https://mote.jonjaques.com`. Workers Builds runs `pnpm build` and then
+`wrangler versions upload` (`deploy` on the production branch), and wrangler
+reads `wrangler.jsonc`: no `main`, `assets.directory` of `./dist`, and a `name`
+that must match the Worker the repository is connected to. Node is pinned by
+`.node-version` (verified on 22.23.2), pnpm by `packageManager`.
+
+There is deliberately no Worker entry point. Mote's one inviolable claim is that
+nothing runs outside the tab; a `main` would be the first step in breaking it.
 
 - **The local mirror is development-only.** `loadLocalRecords()` returns `[]` unless
-  `import.meta.env.DEV`. A deploy must never fetch `/models/index.json`: Pages answers an
-  unknown path with a 200 HTML shell, and HTML parsed as a record list is the cache
+  `import.meta.env.DEV`. A deploy must never fetch `/models/index.json`: it is a guaranteed
+  miss, and that miss is a 404 only while `assets.not_found_handling` stays at its default
+  of `"none"`. Set it to `single-page-application` — the reflex for a Vite build — and the
+  same request answers 200 with the HTML shell, which parsed as a record list is the cache
   poisoning AGENTS has warned about since the beginning. There is a test for this.
 - **Analytics are a build variable.** `analytics()` in `vite.config.ts` injects the gtag
   pair into `index.html` only when `GA_MEASUREMENT_ID` (or `VITE_…`) is set *and* matches

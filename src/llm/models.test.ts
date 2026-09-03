@@ -98,8 +98,9 @@ describe('createModelCatalog', () => {
 
     const { models, appConfig } = await createModelCatalog()
 
-    // On Cloudflare Pages /models/index.json answers with the SPA shell, and a 200 HTML body
-    // parsed as a record list is how the weight cache gets poisoned.
+    // A deployed miss on /models/index.json is a 404 only while `not_found_handling` stays
+    // "none"; under single-page-application it answers 200 with the HTML shell, and HTML parsed
+    // as a record list is how the weight cache gets poisoned.
     expect(fetchSpy).not.toHaveBeenCalled()
     expect(models.every((model) => model.source === 'network')).toBe(true)
     expect(appConfig.model_list.some((record) => record.model_id.endsWith(LOCAL_SUFFIX))).toBe(false)

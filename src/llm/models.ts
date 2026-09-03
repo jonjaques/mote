@@ -348,8 +348,11 @@ function isModelRecord(value: unknown): value is ModelRecord {
 
 // The mirror is a development convenience: three ids that happen to be on one machine's disk,
 // served by Vite middleware that only exists in dev. A production build must not fetch
-// /models/index.json at all — on Cloudflare Pages that path answers with the SPA shell, and a
-// 200 HTML body parsed as a record list is how the model cache gets poisoned.
+// /models/index.json at all: it is a guaranteed miss on every load, and the miss is only a 404
+// for as long as the deploy keeps `not_found_handling` at "none". Flip that to
+// single-page-application — the reflex setting for a Vite build — and the same request answers
+// 200 with the HTML shell, which parsed as a record list is how the model cache gets poisoned.
+// Gating here makes the app immune to that configuration choice rather than dependent on it.
 async function loadLocalRecords(): Promise<ModelRecord[]> {
   if (!import.meta.env.DEV) return []
 

@@ -30,17 +30,24 @@ pnpm models download Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC
 The mirror lands in `./models/` (gitignored, multi-gigabyte) and is served by dev-only Vite
 middleware. **A production build never reads it** — deploys download from Hugging Face only.
 
-## Deploying (Cloudflare Pages)
+## Deploying (Cloudflare Workers)
+
+Static assets only — there is no Worker entry point, and there is not going to be. Workers
+Builds runs the build and then wrangler, which reads `wrangler.jsonc`.
 
 | Setting | Value |
 |---|---|
 | Build command | `pnpm build` |
-| Output directory | `dist` |
-| Node version | pinned by `.node-version` |
+| Deploy command | `npx wrangler versions upload` (`deploy` on the production branch) |
+| Assets directory | `./dist`, from `wrangler.jsonc` |
+| Worker name | `mote`, from `wrangler.jsonc` — must match the connected Worker |
+| Node / pnpm | pinned by `.node-version` and `packageManager` |
 | Environment variable | `GA_MEASUREMENT_ID` — optional, `G-XXXXXXXXXX` |
 
-Nothing else is required; `public/_headers` carries the security and caching headers, and the
-service worker is emitted into `dist/sw.js` by the build.
+Nothing else is required. `public/_headers` is copied into `dist/`, where Workers parses it
+for the security and caching headers; the service worker is emitted into `dist/sw.js` by the
+build. `assets.not_found_handling` is deliberately left at `"none"` so a missing path 404s
+instead of being answered with the app shell — `wrangler.jsonc` says why that matters here.
 
 **Analytics are opt-in at build time.** Without `GA_MEASUREMENT_ID` the build injects no tag
 and the deploy makes no request to any third party. With it, the tag reports page views and
