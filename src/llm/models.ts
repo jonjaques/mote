@@ -153,6 +153,102 @@ export function getChatOverrides(model: AvailableModel): ChatOptions | undefined
   return model.record.overrides
 }
 
+export type PreflightFailure = 'no-webgpu' | 'no-adapter'
+
+export interface AdapterFacts {
+  vendor?: string
+  architecture?: string
+  description?: string
+  maxBufferMB?: number
+}
+
+export type PreflightVerdict =
+  | { ok: true; adapter: AdapterFacts }
+  | { ok: false; reason: PreflightFailure; detected: string }
+
+/** Absent `navigator.gpu` is knowable before the first paint; nothing else is. */
+export function preflightSync(): PreflightVerdict | undefined {
+  if (navigator.gpu) return undefined
+  return { ok: false, reason: 'no-webgpu', detected: 'navigator.gpu — absent' }
+}
+
+// The same probe `assertModelSupported` runs, hoisted ahead of the picker. Mote has no
+// degraded mode, so a machine without an adapter should be told that before it is offered a
+// model list, a Load button and a several-gigabyte download it can never use.
+export async function runPreflight(): Promise<PreflightVerdict> {
+  const known = preflightSync()
+  if (known) return known
+
+  let adapter: GPUAdapter | null = null
+  try {
+    adapter = await navigator.gpu.requestAdapter()
+  } catch {
+    // requestAdapter rejects rather than resolving null on some blocklisted drivers.
+    adapter = null
+  }
+  if (!adapter) {
+    return {
+      ok: false,
+      reason: 'no-adapter',
+      detected: 'navigator.gpu — present · requestAdapter() — null',
+    }
+  }
+
+  const maxBufferSize = adapter.limits.maxBufferSize
+  return {
+    ok: true,
+    adapter: {
+      // Every field is optional in the spec and Chrome returns "" for the ones it masks.
+      vendor: adapter.info?.vendor || undefined,
+      architecture: adapter.info?.architecture || undefined,
+      description: adapter.info?.description || undefined,
+      maxBufferMB: maxBufferSize ? Math.round(maxBufferSize / 1_048_576) : undefined,
+    },
+  }
+}
+
+export interface ModelDownload {
+  bytes: number
+  shards: number
+}
+
+const downloads = new Map<string, Promise<ModelDownload | undefined>>()
+
+// `ModelRecord` carries VRAM but no download size, and the question in front of a visitor
+// about to press Load is how many gigabytes are about to cross the network. The same
+// `ndarray-cache.json` WebLLM reads to plan the fetch answers it exactly: `metadata.ParamBytes`
+// and one entry per shard. It is ~140 KB, so it is fetched for the selected model only and
+// memoised for the session — including for a cached model, whose byte total the load readout
+// still needs while the shards go onto the GPU.
+export function fetchModelDownload(model: AvailableModel): Promise<ModelDownload | undefined> {
+  const pending = downloads.get(model.id)
+  if (pending) return pending
+
+  const request = (async (): Promise<ModelDownload | undefined> => {
+    try {
+      const base = toAbsoluteModelUrl(model.record.model)
+      const response = await fetch(new URL('ndarray-cache.json', base).href)
+      if (!response.ok) return undefined
+
+      const manifest: unknown = await response.json()
+      if (!manifest || typeof manifest !== 'object') return undefined
+      const { metadata, records } = manifest as {
+        metadata?: { ParamBytes?: unknown }
+        records?: unknown
+      }
+      if (typeof metadata?.ParamBytes !== 'number') return undefined
+
+      return { bytes: metadata.ParamBytes, shards: Array.isArray(records) ? records.length : 0 }
+    } catch {
+      // A missing or unreachable manifest costs the readout a number, never the load.
+      return undefined
+    }
+  })()
+
+  downloads.set(model.id, request)
+  return request
+}
+
 export async function assertModelSupported(model: AvailableModel): Promise<void> {
   const gpu = navigator.gpu
   if (!gpu) {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent } from 'react'
-import { ArrowRight, ArrowUp, Eraser, LoaderCircle, Square, Sparkle } from 'lucide-react'
+import { ArrowRight, ArrowUp, ChevronRight, Eraser, LoaderCircle, Square, Sparkle } from 'lucide-react'
 import type { ChatCompletionMessageParam } from '@mlc-ai/web-llm'
 
 import { registerAutomationHooks, type AutomationRun } from '@/automation'
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { runAgent, type AgentProgress, type AgentStats, type AgentToolActivity } from '@/llm/agent'
 import { interruptGeneration } from '@/llm/engine'
+import { starterScenarios } from '@/llm/prompts'
 import { liveStream } from '@/llm/stream'
 import { projectFS } from '@/sandbox/fs'
 import { useAppState, type ChatMessage } from '@/state'
@@ -41,7 +42,10 @@ function StreamBox() {
   if (!text) return null
   const tail = text.length > STREAM_TAIL ? `…${text.slice(-STREAM_TAIL)}` : text
   return (
-    <pre ref={boxRef} className="stream-box" aria-label="Model output">
+    // Hidden from assistive tech on purpose: this repaints per token, and inside any live
+    // region it becomes an unstoppable announcement of half-written JSON. The throttled
+    // status line above it is what gets announced; this box is for watching, not reading.
+    <pre ref={boxRef} className="stream-box" aria-hidden="true">
       {tail}
     </pre>
   )
@@ -90,9 +94,28 @@ function StatsLine({ stats, stopped, cutOff }: { stats: AgentStats; stopped?: bo
   return <p className="message-stats">{parts.join(' · ')}</p>
 }
 
+// One sentence a screen reader hears when a turn ends, in place of the streaming transcript.
+function describeResult(result: AutomationRun): string {
+  const tools = result.tools.length
+  const parts = [
+    result.error
+      ? 'Generation failed'
+      : result.stopped
+        ? 'Stopped'
+        : result.cutOff
+          ? 'Reply cut off'
+          : 'Reply finished',
+    tools ? `${tools} ${tools === 1 ? 'tool call' : 'tool calls'}` : null,
+    `${result.seconds.toFixed(1)} seconds`,
+    result.cutOff ? 'Continue available' : null,
+  ].filter(Boolean)
+  return parts.join(' · ')
+}
+
 export function Chat() {
   const { state, dispatch } = useAppState()
   const [input, setInput] = useState('')
+  const [announcement, setAnnouncement] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const stateRef = useRef(state)
@@ -113,6 +136,25 @@ export function Chat() {
   useEffect(() => {
     if (ready && !state.generating) textareaRef.current?.focus()
   }, [ready, state.generating])
+
+  // Esc has to work from anywhere in the document while a turn runs. It used to hang off the
+  // composer's own onKeyDown, and the composer was `disabled` for exactly that period — a
+  // disabled control receives no key events, so the shortcut the empty state advertises has
+  // never actually fired. The composer is read-only now, which also keeps focus where it was.
+  useEffect(() => {
+    if (!state.generating) return
+    const controller = new AbortController()
+    window.addEventListener(
+      'keydown',
+      (event) => {
+        if (event.key !== 'Escape') return
+        event.preventDefault()
+        interruptGeneration()
+      },
+      { signal: controller.signal },
+    )
+    return () => controller.abort()
+  }, [state.generating])
 
   async function runInput(content: string): Promise<AutomationRun> {
     if (!content) throw new Error('Nothing to send.')
@@ -183,11 +225,13 @@ export function Chat() {
         stopped: result.stopped,
         stats: result.stats,
       })
-      return {
+      const run: AutomationRun = {
         ...result,
         seconds: (performance.now() - startedAt) / 1_000,
         tools: [...tools.values()],
       }
+      setAnnouncement(describeResult(run))
+      return run
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       dispatch({
@@ -196,7 +240,7 @@ export function Chat() {
         content: `Generation failed: ${message}`,
       })
       dispatch({ type: 'finishMessage', id: assistantId })
-      return {
+      const run: AutomationRun = {
         content: '',
         cutOff: false,
         stopped: false,
@@ -205,6 +249,8 @@ export function Chat() {
         tools: [...tools.values()],
         error: message,
       }
+      setAnnouncement(describeResult(run))
+      return run
     } finally {
       dispatch({ type: 'setGenerating', value: false })
     }
@@ -238,10 +284,14 @@ export function Chat() {
       event.preventDefault()
       void sendMessage()
     }
-    if (event.key === 'Escape' && state.generating) {
-      event.preventDefault()
-      interruptGeneration()
-    }
+    // Escape is handled on window while generating, so it works wherever focus is.
+  }
+
+  // Fills the composer instead of sending it. The visitor should see the exact text they are
+  // about to run before a model starts spending their GPU on it.
+  function fillComposer(prompt: string) {
+    setInput(prompt)
+    textareaRef.current?.focus()
   }
 
   function clearContext() {
@@ -295,12 +345,32 @@ export function Chat() {
         </div>
       </div>
 
-      <div ref={scrollRef} className="message-list" aria-live="polite">
+      {/* Not a live region. Marking the whole transcript `aria-live` meant every streamed
+          chunk re-announced the growing conversation; the throttled status line inside the
+          pending message and the one-shot summary below are the announcements. */}
+      <div ref={scrollRef} className="message-list">
         {state.messages.length === 0 ? (
           <div className="chat-empty">
-            <span className="mote-mark" aria-hidden="true" />
-            <p>{ready ? 'Describe a page or a change to the project.' : 'A private model, waiting inside this tab.'}</p>
-            <small>{ready ? 'Enter sends · Shift+Enter for a new line · Esc stops' : 'Load a runtime to begin.'}</small>
+            <div className="chat-empty-lead">
+              <span className="mote-mark" aria-hidden="true" />
+              <p>{ready ? 'Describe a page or a change to the project.' : 'A private model, waiting inside this tab.'}</p>
+              <small>{ready ? 'Enter sends · Shift+Enter for a new line · Esc stops' : 'Load a runtime to begin.'}</small>
+            </div>
+            <nav className="starters" aria-labelledby="starters-heading">
+              <h3 id="starters-heading">Start from</h3>
+              {starterScenarios.map((scenario) => (
+                <button
+                  key={scenario.prompt}
+                  type="button"
+                  disabled={!ready || state.generating}
+                  onClick={() => fillComposer(scenario.prompt)}
+                >
+                  <ChevronRight aria-hidden="true" />
+                  <span>{scenario.prompt}</span>
+                  <small>{scenario.kind}</small>
+                </button>
+              ))}
+            </nav>
           </div>
         ) : (
           state.messages.map((message) => (
@@ -340,6 +410,10 @@ export function Chat() {
         )}
       </div>
 
+      <p className="sr-only" role="status">
+        {announcement}
+      </p>
+
       <form className="composer" onSubmit={sendMessage}>
         <Textarea
           ref={textareaRef}
@@ -353,7 +427,10 @@ export function Chat() {
                 : 'Ask Mote to build or change something…'
               : 'Load a model to start…'
           }
-          disabled={!ready || state.generating}
+          // Read-only rather than disabled while generating: a disabled field drops focus to
+          // <body> mid-turn and answers no keys, which is what made Esc unreachable.
+          disabled={!ready}
+          readOnly={state.generating}
           rows={3}
           aria-label="Message"
         />

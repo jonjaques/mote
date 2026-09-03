@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+/* Ships seven subsets, but each @font-face carries a unicode-range, so a browser fetches only
+   the Latin file (48 KB). The others sit unused in dist; splitting them out by hand would
+   trade a maintained @font-face block for no download the user ever makes. */
 @import "@fontsource-variable/inter";
 
 @custom-variant dark (&:is(.dark *));
@@ -55,8 +58,11 @@
   --radius: 0.35rem;
   --panel: oklch(0.155 0.009 255);
   --panel-raised: oklch(0.18 0.011 255);
-  --grid-line: oklch(0.28 0.015 245 / 38%);
   --cyan-dim: oklch(0.55 0.09 183);
+  /* Monospace foreground for every well (editor, console, raw stream, tool code). These
+     were four hand-tuned near-duplicates that had drifted 0.72-0.83 apart; at this size the
+     difference read as inconsistent rendering rather than as hierarchy. */
+  --code-foreground: oklch(0.8 0.03 220);
 }
 
 @layer base {
@@ -90,7 +96,11 @@
 
 .mote-shell {
   display: grid;
-  grid-template-columns: minmax(19rem, 24rem) minmax(0, 1fr);
+  /* `minmax(19rem, 24rem)` handed the pane its 24rem maximum at every width, because the
+     workspace track's minimum is 0 and there is always "free space" to award. The pane
+     therefore kept 384px on a 900px window while the workspace was clipped. A clamp makes
+     the pane yield first and still hold its full width once the window can afford it. */
+  grid-template-columns: clamp(17rem, 28vw, 24rem) minmax(0, 1fr);
   width: 100vw;
   height: 100svh;
   background: var(--background);
@@ -98,6 +108,11 @@
 
 .side-pane {
   display: grid;
+  /* The column is explicit for the same reason every flexible row here is `minmax(0, 1fr)`:
+     an implicit `auto` column is sized from its widest child's min-content, so the model
+     select's full label made the track 316px inside a 287px pane and the version, the load
+     percentage and the delete button were clipped off the edge. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto minmax(0, 1fr);
   min-width: 0;
   /* A grid item's automatic minimum is its min-content height, and a scroll container's
@@ -148,8 +163,7 @@
 }
 
 .brand-symbol span,
-.mote-mark,
-.core-particle {
+.mote-mark {
   width: 0.5rem;
   height: 0.5rem;
   background: var(--primary);
@@ -157,8 +171,7 @@
 }
 
 .brand h1,
-.section-heading h2,
-.placeholder-core h2 {
+.section-heading h2 {
   margin: 0;
   font-weight: 620;
   letter-spacing: -0.025em;
@@ -182,7 +195,6 @@
 .version,
 .section-heading p,
 .storage-line,
-.coordinate-label,
 .workspace-status,
 .message > span,
 .model-option small {
@@ -207,6 +219,7 @@
 
 .section-heading {
   display: flex;
+  min-width: 0;
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
@@ -215,6 +228,10 @@
 
 .section-heading h2 {
   font-size: 0.8rem;
+}
+
+.section-heading > div {
+  min-width: 0;
 }
 
 .section-heading p {
@@ -256,14 +273,23 @@
   color: var(--cyan-dim);
 }
 
+/* Prebuilt Hugging Face ids run long (`Llama-3.1-8B-Instruct-q4f32_1-MLC-1k`) and the trigger
+   is a fixed-width button in a 19rem pane. Without this the label pushes the caret out of the
+   control; the local mirror's three short ids hid it. */
 .model-option span {
   display: grid;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .model-option small {
   margin-top: 0.1rem;
+  overflow: hidden;
   color: var(--muted-foreground);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .model-meta {
@@ -303,6 +329,36 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* A two-column key/value block. The picker's download cost and the preflight refusal both
+   report facts about the machine, so they report them in the same shape. */
+.readout {
+  display: grid;
+  margin: 0.65rem 0 0;
+  grid-template-columns: 4.6rem minmax(0, 1fr);
+  gap: 0.3rem 0.7rem;
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+
+.readout dt {
+  color: var(--muted-foreground);
+  font-weight: 650;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.readout dd {
+  margin: 0;
+  color: color-mix(in oklch, var(--foreground), transparent 8%);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.readout code {
+  color: var(--code-foreground);
+  font: 0.65rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 .load-progress {
   margin: 0.75rem 0;
 }
@@ -329,6 +385,7 @@
 }
 
 .progress-copy span {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -337,6 +394,28 @@
 .progress-copy strong {
   color: var(--foreground);
   font-variant-numeric: tabular-nums;
+}
+
+/* Bytes on the left, the route those bytes are taking on the right. The second half is the
+   point: it is where a visitor watches the weights stop being a download and become a GPU. */
+.progress-detail {
+  display: flex;
+  min-width: 0;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.progress-detail span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--cyan-dim);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .inline-error {
@@ -364,6 +443,10 @@
 }
 
 .chat-heading {
+  /* `.session-actions` is `flex: none`, so this row cannot shrink — it either fits or it
+     overflows the pane. Wrapping costs nothing at full width and drops the two actions onto
+     their own line as soon as the pane clamps. */
+  flex-wrap: wrap;
   padding: 0 1rem;
 }
 
@@ -385,6 +468,12 @@
   min-height: 9rem;
   align-content: center;
   justify-items: center;
+  gap: 1.5rem;
+}
+
+.chat-empty-lead {
+  display: grid;
+  justify-items: center;
   text-align: center;
 }
 
@@ -402,6 +491,82 @@
 .chat-empty small {
   margin-top: 0.25rem;
   font-size: 0.68rem;
+}
+
+/* Three prompts the composer can be filled with, so a first visit does not open on a blank
+   field. Square rows abutted by hairlines, not cards: the same list vocabulary as the file
+   tree, because this is a list of things to run rather than a set of suggestions. */
+.starters {
+  width: 100%;
+  max-width: 21rem;
+  border-top: 1px solid color-mix(in oklch, var(--border), transparent 30%);
+}
+
+.starters h3 {
+  margin: 0;
+  padding: 0.7rem 0 0.5rem;
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.starters button {
+  display: grid;
+  width: 100%;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.5rem 0.4rem;
+  color: var(--muted-foreground);
+  background: transparent;
+  border: 0;
+  border-top: 1px solid color-mix(in oklch, var(--border), transparent 55%);
+  cursor: pointer;
+  text-align: left;
+}
+
+.starters button svg {
+  width: 0.7rem;
+  height: 0.7rem;
+  align-self: center;
+  color: var(--cyan-dim);
+}
+
+.starters button span {
+  color: color-mix(in oklch, var(--foreground), transparent 8%);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.starters button small {
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.starters button:hover:not(:disabled) {
+  background: var(--muted);
+}
+
+.starters button:hover:not(:disabled) span {
+  color: var(--foreground);
+}
+
+.starters button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+/* Still legible while the weights download: reading what Mote can be asked for is the most
+   useful thing to do during a cold start. */
+.starters button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .message {
@@ -427,6 +592,7 @@
   font-size: 0.78rem;
   line-height: 1.55;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .tool-call {
@@ -506,10 +672,18 @@
   line-height: 1.45;
 }
 
+/* Read-only, not disabled, while a turn runs: it has to keep focus and keep receiving keys.
+   It should still read as inert, which is what `disabled` used to convey for free. */
+.composer textarea[readonly] {
+  color: var(--muted-foreground);
+  cursor: default;
+}
+
 .main-area {
   display: grid;
   min-width: 0;
   min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
@@ -701,7 +875,7 @@
   margin: 0;
   overflow: auto;
   padding: 1.25rem;
-  color: oklch(0.83 0.035 220);
+  color: var(--code-foreground);
   background: oklch(0.11 0.008 255);
   font: 0.72rem/1.65 ui-monospace, SFMono-Regular, Menlo, monospace;
   tab-size: 2;
@@ -729,13 +903,29 @@
   font: 0.72rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+.view-loading {
+  display: grid;
+  height: 100%;
+  margin: 0;
+  place-content: center;
+  color: var(--muted-foreground);
+  background: var(--background);
+  font-size: 0.72rem;
+  letter-spacing: 0.055em;
+}
+
 .console-line {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr);
   align-items: start;
   gap: 0.6rem;
+  /* Skip layout and paint for lines scrolled out of view. The buffer is capped, but a full
+     2000-line list is still 2000 grid containers to lay out on tab open. The intrinsic size
+     is one line's height so the scrollbar stays honest. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 1.6rem;
   padding: 0.42rem 0.8rem;
-  color: oklch(0.79 0.025 230);
+  color: var(--code-foreground);
   border-bottom: 1px solid color-mix(in oklch, var(--border), transparent 65%);
   font: 0.7rem/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
@@ -765,90 +955,6 @@
 .console-error,
 .console-error svg {
   color: oklch(0.73 0.16 28);
-}
-
-.workspace-placeholder {
-  position: relative;
-  display: grid;
-  min-width: 0;
-  min-height: 0;
-  place-items: center;
-  overflow: hidden;
-  background: oklch(0.115 0.007 255);
-}
-
-.coordinate-grid {
-  position: absolute;
-  inset: 1.25rem;
-  opacity: 0.65;
-  background-image:
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: 2.5rem 2.5rem;
-  mask-image: linear-gradient(to bottom, transparent, black 18%, black 82%, transparent);
-}
-
-.placeholder-core {
-  position: relative;
-  display: grid;
-  width: min(25rem, calc(100% - 3rem));
-  min-height: 14rem;
-  place-items: center;
-  align-content: center;
-  border: 1px solid var(--border);
-  background: color-mix(in oklch, var(--background), transparent 4%);
-  text-align: center;
-}
-
-.placeholder-core::before,
-.placeholder-core::after {
-  position: absolute;
-  width: 3rem;
-  height: 1px;
-  content: "";
-  background: var(--cyan-dim);
-}
-
-.placeholder-core::before {
-  top: -1px;
-  left: -1px;
-}
-
-.placeholder-core::after {
-  right: -1px;
-  bottom: -1px;
-}
-
-.core-particle {
-  margin-bottom: 1.25rem;
-}
-
-.placeholder-core h2 {
-  font-size: 1rem;
-}
-
-.placeholder-core p {
-  max-width: 25ch;
-  margin: 0.35rem 0 0;
-  color: var(--muted-foreground);
-  font-size: 0.72rem;
-  line-height: 1.5;
-}
-
-.coordinate-label {
-  position: absolute;
-  color: var(--muted-foreground);
-  font-weight: 650;
-}
-
-.coordinate-label-top {
-  top: 2rem;
-  left: 2rem;
-}
-
-.coordinate-label-bottom {
-  right: 2rem;
-  bottom: 2rem;
 }
 
 .workspace-status {
@@ -906,6 +1012,7 @@
 }
 
 .generation-status > span:first-of-type {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -934,7 +1041,7 @@
   margin: 0.45rem 0 0;
   overflow: auto;
   padding: 0.5rem 0.6rem;
-  color: oklch(0.72 0.03 220);
+  color: var(--code-foreground);
   background: oklch(0.11 0.008 255);
   border: 1px solid color-mix(in oklch, var(--primary), transparent 75%);
   border-left-width: 2px;
@@ -975,10 +1082,15 @@
   white-space: nowrap;
 }
 
-.tool-path:hover,
+.tool-path:hover {
+  color: var(--primary);
+  text-decoration-style: solid;
+}
+
 .tool-path:focus-visible {
   color: var(--primary);
-  outline: none;
+  outline: 1px solid var(--primary);
+  outline-offset: 2px;
   text-decoration-style: solid;
 }
 
@@ -987,7 +1099,7 @@
   margin: 0.15rem 0 0;
   overflow: auto;
   padding: 0.4rem 0.5rem;
-  color: oklch(0.8 0.03 220);
+  color: var(--code-foreground);
   background: oklch(0.11 0.008 255);
   border: 1px solid color-mix(in oklch, var(--border), transparent 40%);
   font: 0.62rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -1015,7 +1127,7 @@
   color: var(--muted-foreground);
   background: var(--muted);
   border-radius: 999px;
-  font-size: 0.6rem;
+  font-size: 0.62rem;
   font-variant-numeric: tabular-nums;
   font-weight: 650;
 }
@@ -1122,6 +1234,13 @@
   background: oklch(0.11 0.008 255);
 }
 
+/* CodeMirror clears its own ring (`&.cm-focused { outline: none }`), which left a keyboard
+   user tabbing into the editor with nothing to see until they found the caret. Same inset
+   marker the file tree uses for selection. */
+.file-editor:focus-within {
+  box-shadow: inset 2px 0 var(--primary);
+}
+
 .file-editor .cm-editor {
   height: 100%;
 }
@@ -1130,13 +1249,285 @@
   overflow: auto;
 }
 
+/* ---- Preflight: the surface a machine without WebGPU gets instead of the shell ---- */
+
+.preflight {
+  display: grid;
+  width: 100vw;
+  height: 100svh;
+  min-height: 0;
+  background: var(--background);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.preflight-scroll {
+  display: grid;
+  min-height: 0;
+  overflow-y: auto;
+  align-content: center;
+  justify-items: center;
+  gap: 1.5rem;
+  padding: 2rem 1rem;
+}
+
+.preflight-card {
+  position: relative;
+  width: 100%;
+  max-width: 30rem;
+  padding: 1.75rem;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+/* Corner ticks are this system's decorative vocabulary; on the brand symbol they are cyan
+   because it is running. Here nothing is, so they take the border colour. */
+.preflight-card::before,
+.preflight-card::after {
+  position: absolute;
+  width: 0.3rem;
+  height: 0.3rem;
+  content: "";
+  background: color-mix(in oklch, var(--muted-foreground), transparent 45%);
+}
+
+.preflight-card::before {
+  top: -0.15rem;
+  right: -0.15rem;
+}
+
+.preflight-card::after {
+  bottom: -0.15rem;
+  left: -0.15rem;
+}
+
+.preflight-brand {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid color-mix(in oklch, var(--border), transparent 40%);
+}
+
+.preflight-brand h1 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 620;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+}
+
+.preflight-brand p {
+  margin: 0.2rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  letter-spacing: 0.055em;
+}
+
+.brand-symbol.is-dark {
+  border-color: var(--border);
+}
+
+.brand-symbol.is-dark span {
+  background: var(--muted-foreground);
+  box-shadow: none;
+}
+
+.brand-symbol.is-dark::before,
+.brand-symbol.is-dark::after {
+  background: var(--border);
+}
+
+/* No display type here either: the system's ceiling is 1rem, and brightness against a muted
+   field plus the space above it is what makes this the loudest line on the screen. */
+.preflight-card h2 {
+  margin: 1.5rem 0 0;
+  font-size: 1rem;
+  font-weight: 620;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+.preflight-card p {
+  margin: 0.75rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.preflight-card p.preflight-lead {
+  color: color-mix(in oklch, var(--foreground), transparent 8%);
+}
+
+.preflight-card .readout {
+  margin-top: 1.5rem;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  padding-top: 1.25rem;
+  border-top: 1px solid color-mix(in oklch, var(--border), transparent 40%);
+}
+
+.preflight-close {
+  padding-top: 1.25rem;
+  border-top: 1px solid color-mix(in oklch, var(--border), transparent 40%);
+}
+
+.preflight-card button {
+  margin-top: 1.25rem;
+  padding-inline: 0;
+}
+
+.preflight-status {
+  display: flex;
+  width: 100%;
+  max-width: 30rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 1rem;
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  letter-spacing: 0.055em;
+}
+
+.preflight-status span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.preflight-status span:last-child {
+  margin-left: auto;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
   }
 }
 
-@media (max-width: 760px) {
+/* ---- Adaptation: narrow desktop windows, touch input, short viewports ---- */
+
+/* Measured, not guessed: the workspace bar's labelled min-content is 815px, and with the pane
+   clamped it stops fitting at about 1140px. Below that the actions drop to icons — which is
+   the system's own register anyway ("machined and unlabeled"). Every one keeps its `title`
+   and `aria-label`, so nothing becomes unnameable. Before this, Reset and "Scripts isolated"
+   were not merely clipped but unreachable: `body` is `overflow: hidden`, so there was no
+   scroll to recover them. */
+@media (max-width: 1140px) {
+  .workspace-actions .action-label {
+    display: none;
+  }
+
+  /* The Reset confirmation replaces the label with a question. Hiding that would leave a
+     destructive control asking nothing. */
+  .workspace-actions button[data-confirming] .action-label {
+    display: inline;
+  }
+
+  .workspace-actions button {
+    padding-inline: 0.45rem;
+  }
+
+  .workspace-bar {
+    gap: 0.5rem;
+  }
+
+  .workspace-status {
+    gap: 0.75rem;
+  }
+}
+
+/* Touch and stylus. Mote is a desktop product — the density above is deliberate and stays —
+   but a control you cannot hit is not a density choice, it is a defect. Only hit areas grow
+   here; type, spacing and colour are untouched. */
+@media (pointer: coarse) {
+  .workspace-tab,
+  .workspace-actions button,
+  .session-actions button,
+  .file-tree > button,
+  .starters button,
+  .composer button,
+  .model-actions button {
+    min-height: 2.75rem;
+  }
+
+  .segmented button {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  .composer button,
+  .workspace-actions button,
+  .model-actions button[aria-label="Delete cached weights"] {
+    min-width: 2.75rem;
+  }
+
+  .model-select {
+    min-height: 2.75rem;
+  }
+
+  .model-menu [role="option"] {
+    min-height: 2.75rem;
+  }
+
+  /* An inline control cannot grow without moving the text around it. Negative margin keeps
+     the tool card's layout identical while the pressable box reaches finger size. */
+  .tool-path {
+    padding-block: 0.65rem;
+    margin-block: -0.65rem;
+  }
+}
+
+/* A landscape phone, or any short window. Two full-height panes inside 390px of height leaves
+   the chat a sliver and pushes the composer out of a layout that cannot scroll. */
+@media (max-height: 560px) {
+  body {
+    overflow: auto;
+  }
+
+  .mote-shell {
+    height: auto;
+    min-height: 100svh;
+  }
+
+  .side-pane,
+  .main-area {
+    overflow: visible;
+  }
+
+  .side-pane {
+    grid-template-rows: auto auto minmax(13rem, 1fr);
+  }
+
+  .workspace-surface {
+    min-height: 20rem;
+  }
+}
+
+/* Notches and home indicators. `env()` resolves to 0 where there is no inset, so these are
+   inert on every desktop browser. */
+@media (pointer: coarse) {
+  .composer {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+
+  .preflight-scroll {
+    padding-bottom: max(2rem, env(safe-area-inset-bottom));
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+
+  .workspace-status {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+}
+
+/* 860px, not 760: with the actions collapsed to icons the two-column shell has a hard floor of
+   819px (a 17rem pane plus a 547px workspace bar), so the old breakpoint left a 60px band where
+   the desktop layout was live and already clipping. This is where the design actually breaks. */
+@media (max-width: 860px) {
   body {
     overflow: auto;
   }
@@ -1205,5 +1596,20 @@
   .session-actions {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  /* The refusal has to fit a phone: it is the only screen that visitor will ever see. */
+  .preflight {
+    width: 100%;
+    height: auto;
+    min-height: 100svh;
+  }
+
+  .preflight-scroll {
+    padding: 1.25rem 0.75rem;
+  }
+
+  .preflight-card {
+    padding: 1.25rem;
   }
 }

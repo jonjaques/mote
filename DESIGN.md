@@ -354,11 +354,36 @@ repeats `min-height: 0`.
 `0.8rem` block with a 1px top rule rather than a gap — conversation reads as a log, not as
 bubbles.
 
-**Responsive.** One breakpoint, at `760px`. Below it the grid collapses to a single column of
-`minmax(100svh, auto)` rows — chat first as a full screen, workspace below it — `body` regains
-`overflow: auto`, the workspace bar wraps its tabs to a full-width row above its actions, tabs
-go `flex: 1`, and the file tree narrows to `8.5rem`. The preview's phone mode is a separate
-control, not a breakpoint: it constrains the iframe to `min(390px, 100%)` with side rules.
+**Responsive.** Desktop is the supported context; everything below is about staying
+serviceable outside it. Three content-driven conditions, each measured at the width where the
+design actually breaks rather than at a device size:
+
+- **`1140px` — actions collapse.** The workspace bar's labelled min-content is `815px`; below
+  about `1140px` it stops fitting. The action labels drop and Reload / Export / Seed / Reset
+  become icons, each keeping its `title` and `aria-label`. Reset's confirmation label is
+  exempt, since a destructive control must still ask its question.
+- **`860px` — the shell stacks.** With the actions collapsed the two-column shell has a hard
+  floor of `819px` (a `17rem` pane plus a `547px` bar), so `860px` is the last width where two
+  columns hold. Below it the grid collapses to a single column of `minmax(100svh, auto)` rows —
+  chat first as a full screen, workspace below — `body` regains `overflow: auto`, the workspace
+  bar wraps its tabs above its actions, tabs go `flex: 1`, and the file tree narrows to `8.5rem`.
+- **`max-height: 560px` — short viewports.** A landscape phone gives each pane 390px of height,
+  which leaves the chat a sliver and pushes the composer out of a layout that cannot scroll. The
+  shell becomes `height: auto` and the page scrolls.
+
+The side pane column is `clamp(17rem, 28vw, 24rem)`, not `minmax(19rem, 24rem)`: a `minmax`
+first track is awarded its maximum whenever the second track's minimum is `0`, so the pane kept
+`384px` on a `900px` window while the workspace was clipped. The clamp makes the pane yield
+first and still hold `24rem` once the window can afford it.
+
+Touch sizing is keyed to `pointer: coarse`, not to width — a touchscreen laptop is not a phone.
+Only hit areas grow, to `2.75rem`; type, spacing and colour are untouched, because the density
+is the design. The one exception is `.tool-path`, an inline link inside tool-card rows set
+`0.15rem` apart, where a 44px box would overlap its neighbours; it reaches `35px` via padding
+offset by negative margin, which clears WCAG 2.2's 24px minimum.
+
+The preview's phone mode is a separate control, not a breakpoint: it constrains the iframe to
+`min(390px, 100%)` with side rules.
 
 ### Named Rules
 
@@ -367,6 +392,13 @@ control, not a breakpoint: it constrains the iframe to `min(390px, 100%)` with s
 automatic minimum is its content, so without this the message list pushes the composer off
 screen as the conversation grows and the action bar widens the page on mobile. This is not a
 preference — it is the reason the layout works.
+
+**It applies to the column axis too.** `.side-pane` and `.main-area` declare
+`grid-template-columns: minmax(0, 1fr)` rather than leaving the single column implicit. An
+implicit `auto` column is sized from its widest child's min-content, so the model select's full
+label made the pane's track `316px` inside a `287px` pane and silently clipped the version, the
+load percentage and the delete button off the right edge. An implicit column is a bare `1fr` by
+another name.
 
 ## Elevation & Depth
 

@@ -118,3 +118,35 @@ export async function getStorageEstimate(): Promise<StorageEstimate> {
 export function interruptGeneration(): void {
   engine?.interruptGenerate()
 }
+
+export interface LoadReport {
+  /** `fetch` = shards crossing the network, `gpu` = cached shards going onto the device. */
+  phase: 'fetch' | 'gpu' | 'other'
+  shard?: number
+  shards?: number
+  bytes?: number
+  text: string
+}
+
+// WebLLM reports load progress as one prose string:
+//   "Fetching param cache[12/88]: 2100MB fetched. 47% completed, 12 secs elapsed. It can take
+//    a while when we first visit this page to populate the cache. Later refreshes will…"
+// Rendering it verbatim buried the two facts that matter — which shard, and whether the bytes
+// are still arriving or already going onto the GPU — under an apology for the wait. Those
+// fields exist nowhere on the report object, so parsing the sentence is the only route to
+// them; an unrecognised string falls through to `other` and is shown as written.
+const PROGRESS_TEXT = /^(Fetching param cache|Loading model from cache)\[(\d+)\/(\d+)]:\s*(\d+)MB/
+
+export function parseLoadReport(text: string | undefined): LoadReport {
+  const trimmed = text?.trim() ?? ''
+  const match = PROGRESS_TEXT.exec(trimmed)
+  if (!match) return { phase: 'other', text: trimmed }
+
+  return {
+    phase: match[1] === 'Fetching param cache' ? 'fetch' : 'gpu',
+    shard: Number(match[2]),
+    shards: Number(match[3]),
+    bytes: Number(match[4]) * 1_048_576,
+    text: trimmed,
+  }
+}

@@ -19,8 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { getStorageEstimate, type StorageEstimate } from '@/llm/engine'
-import type { AvailableModel } from '@/llm/models'
+import { getStorageEstimate, parseLoadReport, type StorageEstimate } from '@/llm/engine'
+import { fetchModelDownload, type AvailableModel, type ModelDownload } from '@/llm/models'
 import { useAppState } from '@/state'
 
 interface ModelPickerProps {
@@ -29,7 +29,10 @@ interface ModelPickerProps {
 }
 
 function formatBytes(value?: number): string {
-  if (!value) return '—'
+  // Zero is a real answer on a fresh profile — "0 B used of 2.1 GB" is information, while the
+  // em dash it used to render claimed the browser had not told us anything.
+  if (value === undefined) return '—'
+  if (value === 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   const exponent = Math.min(Math.floor(Math.log(value) / Math.log(1_024)), units.length - 1)
   return `${(value / 1_024 ** exponent).toFixed(exponent > 2 ? 1 : 0)} ${units[exponent]}`
@@ -38,6 +41,36 @@ function formatBytes(value?: number): string {
 function vramLabel(model: AvailableModel): string {
   const megabytes = model.record.vram_required_MB
   return megabytes ? `${(megabytes / 1_024).toFixed(1)} GB` : '—'
+}
+
+// The load bar used to render WebLLM's own sentence, which spends its second half apologising
+// for the wait. What a visitor is owed instead is the machinery: which shard, how many bytes,
+// and above all whether they are still arriving from the network or already going onto the
+// GPU. That last distinction is the local-inference claim being made visible while it happens.
+function describeLoad(
+  report: ReturnType<typeof parseLoadReport>,
+  total: number | undefined,
+  source: 'local' | 'network' | undefined,
+): { label: string; bytes?: string; path?: string } {
+  const position = report.shards ? ` ${report.shard}/${report.shards}` : ''
+  const bytes =
+    report.bytes === undefined
+      ? undefined
+      : total
+        ? `${formatBytes(report.bytes)} / ${formatBytes(total)}`
+        : formatBytes(report.bytes)
+
+  if (report.phase === 'fetch') {
+    return {
+      label: `Fetching shard${position}`,
+      bytes,
+      path: `${source === 'local' ? 'local mirror' : 'huggingface.co'} → browser cache`,
+    }
+  }
+  if (report.phase === 'gpu') {
+    return { label: `Uploading shard${position}`, bytes, path: 'browser cache → GPU' }
+  }
+  return { label: report.text || 'Checking GPU…' }
 }
 
 function ModelOption({ model, cached }: { model: AvailableModel; cached: boolean }) {
@@ -58,6 +91,9 @@ function ModelOption({ model, cached }: { model: AvailableModel; cached: boolean
 export function ModelPicker({ onLoad, onDelete }: ModelPickerProps) {
   const { state, dispatch } = useAppState()
   const [storage, setStorage] = useState<StorageEstimate>()
+  // Keyed by model id rather than cleared on selection, so the effect never calls setState in
+  // its own body — oxlint flags that and the React Compiler bails out of the component.
+  const [download, setDownload] = useState<{ id: string; size?: ModelDownload }>()
   // Remember which model the confirmation was for; switching models cancels it by itself.
   const [confirmDeleteFor, setConfirmDeleteFor] = useState<string | null>(null)
   const confirmingDelete = confirmDeleteFor === state.model.selectedId
@@ -73,6 +109,20 @@ export function ModelPicker({ onLoad, onDelete }: ModelPickerProps) {
   useEffect(() => {
     void getStorageEstimate().then(setStorage)
   }, [state.model.cachedIds])
+
+  useEffect(() => {
+    if (!selected) return
+    const { id } = selected
+    void fetchModelDownload(selected).then((size) => setDownload({ id, size }))
+  }, [selected])
+
+  // `undefined` while the manifest is still in flight; `{ size: undefined }` once it failed.
+  const measured = download?.id === state.model.selectedId ? download : undefined
+  const load = describeLoad(
+    parseLoadReport(state.model.progress?.text),
+    measured?.size?.bytes,
+    selected?.source,
+  )
 
   return (
     <section className="model-panel" aria-labelledby="model-heading">
@@ -127,15 +177,39 @@ export function ModelPicker({ onLoad, onDelete }: ModelPickerProps) {
         </span>
       </div>
 
+      {!isCached && !isLoading && (
+        <dl className="readout">
+          <dt>Download</dt>
+          <dd>
+            {measured === undefined
+              ? 'reading manifest…'
+              : measured.size
+                ? `${formatBytes(measured.size.bytes)} · ${measured.size.shards} shards`
+                : 'size unavailable'}
+          </dd>
+          <dt>Source</dt>
+          <dd>
+            {selected?.source === 'local' ? 'This machine’s mirror' : 'huggingface.co'} · once,
+            then cached here
+          </dd>
+        </dl>
+      )}
+
       {isLoading && (
         <div className="load-progress" role="status">
           <div className="progress-track">
             <span style={{ width: `${Math.max(2, (state.model.progress?.progress ?? 0) * 100)}%` }} />
           </div>
           <div className="progress-copy">
-            <span>{state.model.progress?.text ?? 'Checking GPU…'}</span>
+            <span>{load.label}</span>
             <strong>{Math.round((state.model.progress?.progress ?? 0) * 100)}%</strong>
           </div>
+          {load.bytes && (
+            <div className="progress-detail">
+              <span>{load.bytes}</span>
+              <span>{load.path}</span>
+            </div>
+          )}
         </div>
       )}
 

@@ -7,10 +7,11 @@ import {
   loadModel,
   prepareEngine,
 } from '@/llm/engine'
-import { FAST_MODEL_ID } from '@/llm/models'
+import { FAST_MODEL_ID, runPreflight } from '@/llm/models'
 import { AppStateProvider, useAppState } from '@/state'
 import { MainArea } from '@/ui/MainArea'
 import { SidePane } from '@/ui/SidePane'
+import { Unsupported } from '@/ui/Unsupported'
 
 // The model loaded last time is loaded again on the next visit when its weights are already
 // cached; from the Cache API that is seconds, and it removes the pick-and-click every reload.
@@ -51,8 +52,18 @@ function MoteApp() {
     initialized.current = true
     setAutomationStatus({ phase: 'initializing' })
 
-    void prepareEngine()
-      .then(async ({ models }) => {
+    void (async () => {
+      const verdict = await runPreflight()
+      dispatch({ type: 'preflight', verdict })
+      if (!verdict.ok) {
+        // No worker, no catalog, no cache probe. There is nothing on this machine for any of
+        // it to run on, and the harness needs a phase it can fail on rather than a timeout.
+        setAutomationStatus({ phase: 'unsupported', error: verdict.detected })
+        return
+      }
+
+      try {
+        const { models } = await prepareEngine()
         const params = new URLSearchParams(window.location.search)
         let remembered: string | null = null
         try {
@@ -81,12 +92,12 @@ function MoteApp() {
         })
         dispatch({ type: 'cacheStatus', ids: cachedIds })
         setAutomationStatus({ phase: 'idle', model: requestedModel.id })
-      })
-      .catch((error) => {
+      } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         dispatch({ type: 'modelError', message })
         setAutomationStatus({ phase: 'error', error: message })
-      })
+      }
+    })()
   }, [dispatch])
 
   useEffect(() => {
@@ -99,10 +110,11 @@ function MoteApp() {
     setAutomationGenerating(state.generating)
   }, [state.generating])
 
+  // ModelPicker already asked, inline, before calling this. A window.confirm here made the
+  // user answer twice and blocked the tab — which the CDP harness cannot dismiss.
   async function deleteSelectedModel() {
     const selected = state.models.find((model) => model.id === state.model.selectedId)
     if (!selected) return
-    if (!window.confirm(`Delete cached files for ${selected.label}?`)) return
 
     try {
       await deleteCachedModel(selected.id)
@@ -114,6 +126,10 @@ function MoteApp() {
         message: error instanceof Error ? error.message : String(error),
       })
     }
+  }
+
+  if (state.preflight.status === 'ready' && !state.preflight.verdict.ok) {
+    return <Unsupported verdict={state.preflight.verdict} />
   }
 
   return (

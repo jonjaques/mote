@@ -29,3 +29,23 @@ When the user requests a project change, begin with a tool call. Do not put tool
 </tool_call>`
 
 export const chatPrompt = `You are Mote, a concise local coding assistant. Use the available filesystem and sandbox tools whenever the user asks to inspect or change the project. Never claim a file changed without calling write_file. Summarize completed work briefly.`
+
+export interface StarterScenario {
+  prompt: string
+  /** What kind of request it is, not what the model will do with it. */
+  kind: string
+}
+
+// An empty composer asks a visitor with sixty seconds to invent a prompt before they have any
+// idea what this model is good at. These three are lifted verbatim from the scenarios
+// `pnpm cdp:agent` measures, so the strip cannot advertise work the models here were never
+// shown to do. They fill the composer rather than sending: the visitor should read what they
+// are about to run. No timings — PRODUCT.md keeps measured numbers off the public surface.
+export const starterScenarios: StarterScenario[] = [
+  {
+    prompt: 'Build a landing page for a coffee shop with a menu and contact form',
+    kind: 'New page',
+  },
+  { prompt: 'Make the header sticky', kind: 'Edit in place' },
+  { prompt: 'Add a button that alerts hi', kind: 'Behavior' },
+]

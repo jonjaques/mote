@@ -11,7 +11,7 @@ import {
 import type { InitProgressReport } from '@mlc-ai/web-llm'
 
 import type { AgentProgress, AgentStats, AgentToolActivity } from '@/llm/agent'
-import type { AvailableModel } from '@/llm/models'
+import { preflightSync, type AvailableModel, type PreflightVerdict } from '@/llm/models'
 
 const CHAT_STORAGE_KEY = 'mote:chat:v1'
 
@@ -39,6 +39,9 @@ export interface ModelState {
   cachedIds: Set<string>
 }
 
+/** `checking` only ever means the async adapter probe; absent WebGPU resolves synchronously. */
+export type PreflightState = { status: 'checking' } | { status: 'ready'; verdict: PreflightVerdict }
+
 export interface WorkspaceState {
   view: WorkspaceView
   selectedPath: string
@@ -46,6 +49,7 @@ export interface WorkspaceState {
 }
 
 export interface AppState {
+  preflight: PreflightState
   models: AvailableModel[]
   model: ModelState
   messages: ChatMessage[]
@@ -56,6 +60,7 @@ export interface AppState {
 }
 
 type Action =
+  | { type: 'preflight'; verdict: PreflightVerdict }
   | { type: 'catalogReady'; models: AvailableModel[]; selectedId: string }
   | { type: 'selectModel'; id: string }
   | { type: 'cacheStatus'; ids: Set<string> }
@@ -97,7 +102,11 @@ function loadMessages(): ChatMessage[] {
 }
 
 function createInitialState(): AppState {
+  // Resolved before the first paint where it can be: a machine with no `navigator.gpu` should
+  // never see the shell it cannot use flash past on its way to the refusal.
+  const known = preflightSync()
   return {
+    preflight: known ? { status: 'ready', verdict: known } : { status: 'checking' },
     models: [],
     model: {
       phase: 'idle',
@@ -112,6 +121,8 @@ function createInitialState(): AppState {
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
+    case 'preflight':
+      return { ...state, preflight: { status: 'ready', verdict: action.verdict } }
     case 'catalogReady':
       return {
         ...state,

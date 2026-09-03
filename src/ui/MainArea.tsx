@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react'
 import {
   Code2,
   Download,
@@ -18,7 +18,11 @@ import { Sandbox } from '@/sandbox/Sandbox'
 import { sandboxBridge, type SandboxConsoleEntry } from '@/sandbox/runtime'
 import { useAppState, type WorkspaceView } from '@/state'
 import { ConsoleView } from './ConsoleView'
-import { FilesView } from './FilesView'
+
+// CodeMirror plus the HTML/CSS/JS language modes are the largest thing in the app after the
+// engine itself, and a visitor who only watches the preview never opens the editor. Split so
+// the first paint does not wait on it.
+const FilesView = lazy(() => import('./FilesView').then((module) => ({ default: module.FilesView })))
 
 const VIEWS: Array<{ id: WorkspaceView; label: string; icon: typeof Monitor }> = [
   { id: 'preview', label: 'Preview', icon: Monitor },
@@ -29,6 +33,11 @@ const VIEWS: Array<{ id: WorkspaceView; label: string; icon: typeof Monitor }> =
 export function MainArea() {
   const { state, dispatch } = useAppState()
   const { view, previewWidth } = state.workspace
+  const snapshot = useSyncExternalStore(
+    projectFS.subscribe,
+    projectFS.getSnapshot,
+    projectFS.getSnapshot,
+  )
   const [sandboxReady, setSandboxReady] = useState(false)
   const [consoleEntries, setConsoleEntries] = useState<SandboxConsoleEntry[]>([])
   const [exporting, setExporting] = useState(false)
@@ -43,7 +52,10 @@ export function MainArea() {
   }, [confirmReset])
 
   const errorCount = consoleEntries.filter((entry) => entry.level === 'error').length
-  const fileCount = projectFS.list().length
+  // Through the snapshot, not projectFS.list(): a render-time read of the singleton has no
+  // reactive input, so the React Compiler caches the first count and the badge never moves
+  // again however many files the model writes.
+  const fileCount = Object.keys(snapshot.files).length
 
   async function downloadProject() {
     setExporting(true)
@@ -117,7 +129,7 @@ export function MainArea() {
             title="Reload the preview and reset its state"
           >
             <RefreshCw />
-            Reload
+            <span className="action-label">Reload</span>
           </Button>
           <Button
             variant="ghost"
@@ -127,23 +139,24 @@ export function MainArea() {
             title="Download the project as a zip"
           >
             {exporting ? <LoaderCircle className="animate-spin" /> : <Download />}
-            Export
+            <span className="action-label">Export</span>
           </Button>
           {import.meta.env.DEV && (
             <Button variant="ghost" size="sm" onClick={() => projectFS.seed()}>
               <FlaskConical />
-              Seed example
+              <span className="action-label">Seed example</span>
             </Button>
           )}
           <Button
             variant={confirmReset ? 'destructive' : 'ghost'}
             size="sm"
+            data-confirming={confirmReset || undefined}
             onClick={resetProject}
             onBlur={() => setConfirmReset(false)}
             title="Replace every file with the starter project"
           >
             <RotateCcw />
-            {confirmReset ? 'Replace all files?' : 'Reset'}
+            <span className="action-label">{confirmReset ? 'Replace all files?' : 'Reset'}</span>
           </Button>
         </div>
       </header>
@@ -155,7 +168,9 @@ export function MainArea() {
         </div>
         {view === 'files' && (
           <div className="view-panel is-active">
-            <FilesView />
+            <Suspense fallback={<p className="view-loading">Loading editor…</p>}>
+              <FilesView />
+            </Suspense>
           </div>
         )}
         {view === 'console' && (
