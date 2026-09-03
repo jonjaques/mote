@@ -51,7 +51,7 @@ function describeLoad(
   report: ReturnType<typeof parseLoadReport>,
   total: number | undefined,
   source: 'local' | 'network' | undefined,
-): { label: string; bytes?: string; path?: string } {
+): { label: string; bytes?: string; path?: string; channel: 'net' | 'live' | 'idle' } {
   const position = report.shards ? ` ${report.shard}/${report.shards}` : ''
   const bytes =
     report.bytes === undefined
@@ -60,22 +60,31 @@ function describeLoad(
         ? `${formatBytes(report.bytes)} / ${formatBytes(total)}`
         : formatBytes(report.bytes)
 
+  // The channel is the colour half of the same sentence: the fetch runs gold because it is the
+  // only moment anything crosses the tab boundary, and the bar goes cyan the instant those
+  // bytes stop being a download and start being a GPU. On a cached model no gold appears at
+  // all, which is the product's whole claim rendered without a word of copy.
   if (report.phase === 'fetch') {
     return {
       label: `Fetching shard${position}`,
       bytes,
       path: `${source === 'local' ? 'local mirror' : 'huggingface.co'} → browser cache`,
+      channel: source === 'local' ? 'live' : 'net',
     }
   }
   if (report.phase === 'gpu') {
-    return { label: `Uploading shard${position}`, bytes, path: 'browser cache → GPU' }
+    return { label: `Uploading shard${position}`, bytes, path: 'browser cache → GPU', channel: 'live' }
   }
-  return { label: report.text || 'Checking GPU…' }
+  return { label: report.text || 'Checking GPU…', channel: 'idle' }
 }
 
 function ModelOption({ model, cached }: { model: AvailableModel; cached: boolean }) {
+  // The source icon carries the channel, so the one question this menu is really asking —
+  // which of these costs me a download? — is answered before the label is read. Colouring the
+  // `small` line instead would put four green and gold rows in competition.
+  const channel = cached ? 'channel-write' : model.source === 'network' ? 'channel-net' : ''
   return (
-    <span className="model-option">
+    <span className={`model-option ${channel}`}>
       {model.source === 'local' ? <Database /> : <HardDriveDownload />}
       <span>
         {model.label}
@@ -171,7 +180,9 @@ export function ModelPicker({ onLoad, onDelete }: ModelPickerProps) {
           <Cpu aria-hidden="true" />
           {selected ? `${vramLabel(selected)} VRAM` : 'VRAM varies'}
         </span>
-        <span>
+        {/* Resident or still over the wire: the same two channels the load bar will use, so
+            the cost of a choice is legible before it is made. */}
+        <span className={isCached ? 'channel-write' : selected?.source === 'local' ? '' : 'channel-net'}>
           {isCached ? <Check aria-hidden="true" /> : <Database aria-hidden="true" />}
           {isCached ? 'Cached in browser' : selected?.source === 'local' ? 'Local mirror' : 'Downloads on load'}
         </span>
@@ -180,7 +191,7 @@ export function ModelPicker({ onLoad, onDelete }: ModelPickerProps) {
       {!isCached && !isLoading && (
         <dl className="readout">
           <dt>Download</dt>
-          <dd>
+          <dd className={selected?.source === 'local' ? undefined : 'channel-net'}>
             {measured === undefined
               ? 'reading manifest…'
               : measured.size
@@ -196,7 +207,7 @@ export function ModelPicker({ onLoad, onDelete }: ModelPickerProps) {
       )}
 
       {isLoading && (
-        <div className="load-progress" role="status">
+        <div className={`load-progress channel-${load.channel}`} role="status">
           <div className="progress-track">
             <span style={{ width: `${Math.max(2, (state.model.progress?.progress ?? 0) * 100)}%` }} />
           </div>
@@ -239,7 +250,15 @@ export function ModelPicker({ onLoad, onDelete }: ModelPickerProps) {
         </div>
       ) : (
         <div className="model-actions">
-          <Button onClick={onLoad} disabled={!selected || isLoading || isLoaded || state.generating}>
+          {/* `data-resident` swaps the cyan fill for a green wash once the weights are here.
+              Cyan means live, and a control that cannot be pressed for the rest of the session
+              is not the live thing in this pane — the sandbox is. */}
+          <Button
+            className="model-load"
+            data-resident={isLoaded || undefined}
+            onClick={onLoad}
+            disabled={!selected || isLoading || isLoaded || state.generating}
+          >
             {isLoading ? <LoaderCircle className="animate-spin" /> : isLoaded ? <Check /> : null}
             {isLoaded ? 'Loaded' : isLoading ? 'Loading' : loaded ? 'Switch model' : 'Load model'}
           </Button>

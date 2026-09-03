@@ -69,6 +69,16 @@ through the bridge, and writes `cdp-report*.json`. It survives a page reload
 mid-run (the trial fails, the run continues) and prints `!! target crashed`
 when the Inspector domain reports one.
 
+**Colour.** Four signal channels (`--signal-live` cyan / `--signal-write`
+green / `--signal-read` blue / `--signal-net` gold), applied through
+`.channel-*` classes that set a local `--channel`. Tool cards carry the
+channel of their tool, so a round of inspection no longer looks like a
+rewrite; the load bar runs gold while shards arrive from Hugging Face and
+cyan once they go to the GPU (the local mirror stays cyan — those bytes never
+leave the machine); the file tree tints icons by type and dots authored files
+green; the editor ships its own `HighlightStyle` instead of CodeMirror's.
+Documented in `DESIGN.md` > Colors, and `detect.mjs` reports no findings.
+
 **Unit suite.** `vitest` + `happy-dom`, tests beside the sources: tool
 parsing and scanning, the agent loop against a scripted engine, srcdoc
 assembly, the virtual filesystem, the model catalog.
@@ -123,7 +133,15 @@ Decisions these numbers settled:
    `Failed to execute 'add' on 'Cache': Request failed`.
 7. **Node 22+ predefines an undefined `localStorage` global** that vitest's
    DOM environment will not replace; `src/test-setup.ts` polyfills it.
-8. Still true from earlier: `resolve/main/` in local records, JSON 404 for
+8. **`theme="dark"` on `<CodeMirror>` silently overrides the syntax palette.**
+   It injects the library's own highlight style — magenta tags, orange
+   strings — on top of any `EditorView.theme`, because a theme only styles
+   chrome and a `HighlightStyle` is a separate extension. That is where the
+   editor's foreign palette came from; `FilesView` now passes `theme="none"`
+   and supplies `syntaxHighlighting(highlight)`. `@codemirror/language` and
+   `@lezer/highlight` are direct dependencies for this reason — pnpm's strict
+   layout will not resolve them transitively.
+9. Still true from earlier: `resolve/main/` in local records, JSON 404 for
    mirror misses, absolute same-origin URLs, `user` + `<tool_response>` for
    Qwen, no `baseUrl`, no `models/` in `public/`, `.cdp-profile/` and
    `models/` ignored by Vite's watcher.

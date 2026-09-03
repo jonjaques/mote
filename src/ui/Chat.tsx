@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent } from 'react'
-import { ArrowRight, ArrowUp, ChevronRight, Eraser, LoaderCircle, Square, Sparkle } from 'lucide-react'
+import { ArrowRight, ArrowUp, ChevronRight, Eraser, LoaderCircle, Square, SquarePlus } from 'lucide-react'
 import type { ChatCompletionMessageParam } from '@mlc-ai/web-llm'
 
 import { registerAutomationHooks, type AutomationRun } from '@/automation'
@@ -339,7 +339,7 @@ export function Chat() {
             disabled={state.generating}
             title="Forget the conversation and reset the project to the starter files"
           >
-            <Sparkle />
+            <SquarePlus />
             New session
           </Button>
         </div>

@@ -28,6 +28,18 @@ const VERBS: Record<string, string> = {
   get_dom: 'Inspect DOM',
 }
 
+// Which signal channel a call belongs to (DESIGN.md > Colors). The one distinction a visitor
+// needs from a scrolling transcript is whether a call changed their project, only looked at
+// it, or reached into the running page — and before this every card was the same cyan, so a
+// four-call round of pure inspection looked exactly like a rewrite.
+const CHANNELS: Record<string, 'write' | 'read' | 'live'> = {
+  write_file: 'write',
+  read_file: 'read',
+  list_files: 'read',
+  run_js: 'live',
+  get_dom: 'live',
+}
+
 function formatBytes(value: number): string {
   return value < 1_024 ? `${value} B` : `${(value / 1_024).toFixed(1)} KB`
 }
@@ -70,7 +82,7 @@ export function ToolCallCard({ activity }: { activity: AgentToolActivity }) {
   const canOpen = path !== undefined && status !== 'running' && call.name !== 'read_file'
 
   return (
-    <div className={`tool-call tool-${status}`}>
+    <div className={`tool-call tool-${status} channel-${CHANNELS[call.name] ?? 'read'}`}>
       <ToolIcon name={call.name} />
       <div>
         <strong>

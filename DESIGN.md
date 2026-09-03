@@ -5,6 +5,21 @@ colors:
   signal-cyan: "oklch(0.82 0.16 183)"
   signal-ink: "oklch(0.12 0.02 190)"
   trace-cyan: "oklch(0.55 0.09 183)"
+  signal-write: "oklch(0.8 0.15 152)"
+  signal-read: "oklch(0.74 0.12 253)"
+  signal-net: "oklch(0.8 0.14 96)"
+  kind-html: "oklch(0.64 0.065 210)"
+  kind-css: "oklch(0.62 0.07 268)"
+  kind-js: "oklch(0.66 0.07 100)"
+  code-tag: "oklch(0.78 0.12 190)"
+  code-name: "oklch(0.84 0.08 210)"
+  code-attr: "oklch(0.74 0.06 245)"
+  code-string: "oklch(0.80 0.09 78)"
+  code-number: "oklch(0.82 0.11 96)"
+  code-comment: "oklch(0.585 0.025 250)"
+  code-punct: "oklch(0.62 0.02 250)"
+  code-caret: "oklch(0.86 0.03 220)"
+  code-bracket-match: "oklch(0.3 0.05 190 / 70%)"
   focus-ring: "oklch(0.73 0.14 183)"
   accent-surface: "oklch(0.23 0.03 190)"
   accent-text: "oklch(0.92 0.04 183)"
@@ -201,7 +216,8 @@ cyan is not a brand color being applied decoratively; it is a lamp, and lamps me
 **Key Characteristics:**
 
 - Dark-only. `color-scheme: dark` is set at the root; there is no light theme and no toggle.
-- One accent, used sparingly, always meaning "live" or "selected".
+- Four signal channels on a cold graphite field. Each is a lamp with one meaning, and each
+  appears as an icon, a 1px rule or a dot — almost never as a fill.
 - Flat by construction — no drop shadows anywhere; depth is four tonal surface steps and 1px borders.
 - Square structure, softened controls (see Shapes).
 - Every number is tabular; every measurement is visible.
@@ -209,20 +225,40 @@ cyan is not a brand color being applied decoratively; it is a lamp, and lamps me
 
 ## Colors
 
-A near-monochrome graphite field with exactly one chromatic voice. Every surface, border, and
-text color sits on the same cool blue axis (hue 235–255) so the single cyan at hue 183 reads as
-emitted light rather than as another color in a palette.
+A cold graphite field carrying an **emission spectrum**: four narrow chromatic lines, each with
+exactly one meaning, on neutrals that stay resolutely colorless. The ground is not tinted by the
+signals — it is the black the signals are emitted against. That is why a hue here reads as a lamp
+on an instrument rather than as a brand color applied to a surface.
+
+The four channels are the system's spine. They live as `--signal-live`, `--signal-write`,
+`--signal-read` and `--signal-net`, and any element can adopt one by taking a `.channel-*` class,
+which sets a local `--channel` the element then spends as an icon color, a 1px rule or a dot.
+A channel never becomes a large fill.
+
+| Channel | Hue | Means | Where |
+|---|---|---|---|
+| **Live** | 183 cyan | running *right now* | the sandbox, the loaded runtime's dot, `run_js` / `get_dom` cards, the GPU upload phase, the active tab, the selected file, text selection |
+| **Write** | 152 green | now **resident here** | `write_file` cards, files that no longer hold their starter text, cached weights, the Loaded control |
+| **Read** | 253 blue | looked at, **not changed** | `read_file` / `list_files` cards, `console.info` |
+| **Net** | 96 gold | bytes **crossing the tab boundary** | the fetch phase of a load, the download size and source readout, an uncached model in the picker |
+
+Net is the one warm value in the entire application, and it earns that by being the exception
+the product exists to make visible. It appears only while something is arriving from outside the
+tab, and it is deliberately absent on a cached model and on the local mirror — the load bar going
+gold → cyan → green is the cold start telling its own story without a word of copy.
 
 ### Primary
 
-- **Signal Cyan** (`oklch(0.82 0.16 183)`): The lamp. It marks the loaded runtime, a ready
-  sandbox, the selected file, the active tab, load progress, the mote mark, and the text
-  selection. It appears as a fill on exactly one control per region — the primary action
-  button — and otherwise only as a 1px rule, a dot, or a glow. Its foreground pair is **Signal
-  Ink** (`oklch(0.12 0.02 190)`), the near-black used for text on top of it.
-- **Trace Cyan** (`oklch(0.55 0.09 183)`): The marking left behind. This is the dimmed cyan for
-  icons inside tool cards and the file tree, the assistant's role label, the version number, and
-  hairline ticks. It carries the family resemblance without competing with the lamp.
+- **Signal Cyan** (`oklch(0.82 0.16 183)`): The live channel, and the system's oldest lamp. Its
+  foreground pair is **Signal Ink** (`oklch(0.12 0.02 190)`), the near-black used for text on top
+  of it. It is still the only channel that ever takes a full fill, on the primary action button.
+- **Signal Write** (`oklch(0.8 0.15 152)`), **Signal Read** (`oklch(0.74 0.12 253)`) and
+  **Signal Net** (`oklch(0.8 0.14 96)`): The other three channels. All sit at lightness 0.74–0.80
+  and chroma 0.12–0.15 so no one of them shouts over the others, and all clear 8:1 against every
+  surface in the system.
+- **Trace Cyan** (`oklch(0.55 0.09 183)`): The marking left behind. The dimmed cyan for the
+  assistant's role label, the version number, plain console lines, the status-bar guarantees, and
+  hairline ticks. It carries the family resemblance without competing with a channel.
 - **Focus Ring** (`oklch(0.73 0.14 183)`): Sits between the two, used only for the 3px
   `focus-visible` ring at 50% opacity and the default outline.
 
@@ -242,7 +278,25 @@ Two diagnostic colors that are deliberately *not* the destructive red:
   foreground pair is **Log Red Ink** (`oklch(0.12 0.02 28)`), used only for the count on that
   badge — the one place Log Red is a fill rather than a text color.
 - **Log Amber** (`oklch(0.78 0.13 80)`): Attention without failure — console warnings and the
-  unsaved-file dot in the editor.
+  unsaved-file dot in the editor. It sits 16° from Signal Net and the two never share a region:
+  Net lives in the runtime panel, Log Amber in console output.
+
+### Subordinate registers
+
+Two places need to differentiate more things than four channels can carry. Both stay below the
+channels in chroma so they read as *tinted*, never as signals.
+
+- **File-type tints**, on the file-tree icon only: **HTML** `oklch(0.64 0.065 210)`, **CSS**
+  `oklch(0.62 0.07 268)`, **JS** `oklch(0.66 0.07 100)`. Chroma is capped at 0.08 — a third of a
+  channel's — because these sit directly beside the cyan selection rule and the green authored
+  dot, which must win.
+- **The editor's syntax palette**, on the well: tag and keyword `oklch(0.78 0.12 190)`, function
+  and definition `oklch(0.84 0.08 210)`, attribute and property `oklch(0.74 0.06 245)`, string
+  `oklch(0.80 0.09 78)`, number and literal `oklch(0.82 0.11 96)`, comment and meta
+  `oklch(0.585 0.025 250)` italic, operator and punctuation `oklch(0.62 0.02 250)`, invalid at
+  Log Red. Structure is carried by the cyan family, values by a single warm note, and comments
+  recede to 4.9:1 rather than disappearing. Four hues is the floor for code that still has to be
+  scannable; this is deliberately not a sixth register invented for the editor.
 
 ### Neutral
 
@@ -272,9 +326,22 @@ Two diagnostic colors that are deliberately *not* the destructive red:
 
 ### Named Rules
 
-**The Single Signal Rule.** Signal Cyan marks exactly one thing per region: what is live, or
-what is selected. If two elements in the same pane are cyan, one of them is wrong. Its rarity
-is the entire reason it reads as a lamp.
+**The One Meaning Per Channel Rule.** This replaces the old Single Signal Rule, which held that
+Signal Cyan marked the one live thing per region. That rule was written when cyan was the only
+hue, and in practice it broke: every completed tool card took a cyan border, so a round of four
+inspections looked exactly like a rewrite and cyan meant nothing in the transcript.
+
+The rule now is stricter, not looser. **A channel means one thing everywhere in the application,
+and an element takes at most one channel.** Cyan did not get more permissive — it got narrower:
+it marks what is *live*, and stopped standing in for "finished", "cached" and "resident", which
+now have their own channel. Before adding a hue, prove the meaning is not already one of the
+four; before spending a channel on an element, prove it is the only channel that element could
+carry. Two elements in the same region may both be cyan when both are genuinely live.
+
+**The Channels Are Lamps Rule.** A channel appears as an icon, a 1px rule, a dot, or text — never
+as a large fill. Signal Cyan on the primary action button is the single exception in the system,
+and the reason the Loaded control gives up its fill the moment it stops being pressable: a fill
+that large stops reading as emitted light and starts reading as a surface.
 
 **The Two Reds Rule.** **Alert Red** (`oklch(0.68 0.2 25)`) is for actions *you can take* —
 destructive buttons, inline delete confirmations, error banners you must respond to. **Log Red**
@@ -282,8 +349,11 @@ destructive buttons, inline delete confirmations, error banners you must respond
 calls, error counts. They are close enough to be mistaken for each other and must never be
 swapped.
 
-**The Cool Axis Rule.** Every neutral sits at hue 235–255 with chroma ≤0.015. A neutral warmer
-than that, or more saturated, breaks the read that the cyan is the only real color in the room.
+**The Cool Axis Rule.** Every neutral sits at hue 235–255 with chroma ≤0.015 — unchanged, and
+now load-bearing in a way it was not before. It used to be justified by cyan being the only real
+color in the room; with four channels overhead it is the only thing keeping them legible. Tinting
+a surface toward any channel would make that channel ambient, and an ambient signal is not a
+signal. The ramp sits *on* the graphite; it never colors it.
 
 ## Typography
 
@@ -500,14 +570,24 @@ decoration and no hand-holding. Controls are sized for someone who already knows
 
 ### Tool call cards
 
-The signature component. A three-column grid — status icon, content, trailing meta — with a 1px
-border, an 80%-opacity Panel Raised fill, and square corners. Icon is Trace Cyan at 0.8rem.
+The signature component, and where the channels do the most work. A three-column grid — leading
+icon, content, trailing status — with a 1px border, an 80%-opacity Panel Raised fill, and square
+corners.
+
+**The card carries the channel of its tool**: `write_file` is Write, `read_file` and `list_files`
+are Read, `run_js` and `get_dom` are Live (they are the two tools that reach into the running
+page). The leading icon says *what the call was*, at 88% of the channel; the trailing icon says
+*whether it finished*, muted while running and full channel once complete. The border is the same
+lamp receded to 24% at rest and 34% when complete — close together on purpose, because the icons
+already carry the channel and a firmer rule turns a round of four calls into four competing
+outlines. A failure overrides the channel outright: Log Red on both icons and the text, and a
+45%-opacity Alert Red border. What the call was going to do stops mattering once it failed.
+
 The tool name is 0.65rem at weight 650 in Instrument White; the file path beside it is a
 `.tool-path` button in Accent Text, mono, `text-decoration: underline dotted` with
 `text-underline-offset: 0.2em`, that opens the file in the editor and goes solid Signal Cyan on
-hover or focus. Completed cards take a 35%-opacity Signal Cyan border; failed cards take Log Red
-text and a 45%-opacity Alert Red border. Long values ellipsize on one line; `run_js` code and
-console output drop into a code well below, capped at `7.5rem` with its own scroll.
+hover or focus. Long values ellipsize on one line; `run_js` code and console output drop into a
+code well below, capped at `7.5rem` with its own scroll.
 
 ### Workspace tabs
 
@@ -525,13 +605,46 @@ line; a metadata row of icon-plus-value pairs; a `0.2rem` progress track with th
 left and a tabular percentage on the right; and a storage readout centered underneath. The
 progress bar is a plain `width` transition on an inner `span` — see Do's and Don'ts.
 
+In the grouped menu, each option's source icon carries its channel — green for cached, gold for a
+Hugging Face record that is not — so the one question the menu is really asking, *which of these
+costs me a download*, is answered before a label is read. The `small` line is deliberately left
+neutral; colouring it too would put ten green and gold rows in competition.
+
+**The panel is where the spectrum tells the cold start.** Before a load, an uncached model shows
+its download size and source in Net gold and a cached one shows "Cached in browser" in Write
+green — the cost of a choice, legible before it is made. During a load, the track and the route
+line run gold while shards are still arriving from `huggingface.co`, then cross-fade (500ms,
+`background-color` only) to cyan the moment those bytes start going to the GPU. Afterwards the
+Load control takes `data-resident` and swaps its cyan fill for a green wash: cyan means live, and
+a control that cannot be pressed again for the rest of the session is not the live thing in this
+pane — the sandbox is.
+
+The local mirror is deliberately exempt from gold. Its bytes never leave the machine, so its
+fetch phase runs cyan; claiming a network crossing that did not happen would be the one kind of
+dishonesty this palette exists to prevent.
+
 ### Console and editor wells
 
 Both are Well-black, monospace, and scroll independently. Console lines are a three-column grid
-(icon, timestamp, content) at 0.7rem with a `color-mix`-recessed 1px separator; warnings take Log
-Amber, errors take Log Red, and the icon inherits the line's color. Editor headers are `2.6rem`,
-uppercase Label type, with the filename in sentence case and an amber dot when the buffer is
-dirty.
+(icon, timestamp, content) at 0.7rem with a `color-mix`-recessed 1px separator. Only warnings and
+errors color the whole line — Log Amber and Log Red, icon included — because only they are
+exceptional. `console.info` takes the Read channel on its icon alone and leaves the text at Code
+Text; a plain `log` keeps its Trace Cyan icon, since it came from the running page.
+
+The editor draws its syntax from the palette above, not from a stock theme. It used to pass
+`theme="dark"` to CodeMirror, which quietly supplied the library's own highlight style — magenta
+tags, warm orange strings — making the largest colored region in the application the one region
+belonging to no design system. It now passes `theme="none"` and ships a `HighlightStyle`; if the
+editor ever shows a hue that is not in the syntax list above, that prop has regressed.
+
+Editor headers are `2.6rem`, uppercase Label type, with the filename in sentence case and an
+amber dot when the buffer is dirty.
+
+The file tree keys its icon to file type (the subordinate tints above) and marks every file that
+no longer holds its starter text with a Write-green dot beside the byte count — the tree's half
+of the write channel, in the same discrete-state vocabulary as the editor's amber dot. Selection
+stays a 1px cyan inset rule on the left, so a file can be selected, authored, both, or neither
+without the two signals colliding.
 
 ### The sandbox starter page
 
@@ -558,8 +671,11 @@ second. The status bar's job is to make the machine's condition continuously leg
 
 ### Do:
 
-- **Do** keep Signal Cyan to one meaning — live or selected — and to roughly one element per
-  region. Everything else that needs to feel cyan uses Trace Cyan.
+- **Do** keep each channel to its one meaning, and give an element at most one channel. Reach for
+  a `.channel-*` class and spend `--channel`; do not mint a bright/dim/border triplet per hue.
+- **Do** check a new meaning against the four channels before adding a fifth hue. "Finished",
+  "cached" and "resident" all turned out to be Write; "the sandbox" and "generating" are both
+  Live.
 - **Do** set `font-variant-numeric: tabular-nums` on every changing number.
 - **Do** give every new scroll region `min-height: 0` and every flexible grid track
   `minmax(0, 1fr)`.
@@ -589,3 +705,11 @@ second. The status bar's job is to make the machine's condition continuously leg
 - **Don't** add a light theme or a theme toggle. `color-scheme: dark` is set at the root and the
   entire palette is built for it.
 - **Don't** use Alert Red for things that already happened, or Log Red on a control you can press.
+- **Don't** tint a neutral toward a channel. The Cool Axis Rule is what keeps four hues legible;
+  an ambient signal is not a signal.
+- **Don't** give a channel a large fill. They are lamps — icons, 1px rules, dots and text. The
+  primary action button is the single documented exception.
+- **Don't** show Net gold for anything that did not cross the tab boundary. The local mirror
+  loads cyan for exactly this reason.
+- **Don't** pass `theme="dark"` to CodeMirror. It silently overrides the syntax palette with the
+  library's own, which is where the magenta tags came from.

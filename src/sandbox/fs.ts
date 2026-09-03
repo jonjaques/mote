@@ -4,6 +4,9 @@ export interface ProjectFile {
   path: ProjectPath
   content: string
   bytes: number
+  // False while the file still holds its exact starter or seed text. The file tree marks the
+  // authored ones, so a visitor can see at a glance what this session actually changed.
+  authored: boolean
 }
 
 // What React subscribes to. A new frozen object per revision so that anything derived from
@@ -17,8 +20,21 @@ export interface ProjectSnapshot {
 
 export function listProjectFiles(files: Readonly<Record<string, string>>): ProjectFile[] {
   return Object.entries(files)
-    .map(([path, content]) => ({ path, content, bytes: encoder.encode(content).byteLength }))
+    .map(([path, content]) => ({
+      path,
+      content,
+      bytes: encoder.encode(content).byteLength,
+      authored: !isPristineContent(path, content),
+    }))
     .sort((a, b) => a.path.localeCompare(b.path))
+}
+
+// The content test behind `VirtualFileSystem.isPristine`, as a free function so the file tree
+// can mark authored files from the snapshot it already subscribes to. Calling the method from
+// render instead would give the React Compiler no reactive input and freeze the marks on
+// whatever the first revision happened to be — the same trap documented on ProjectSnapshot.
+export function isPristineContent(path: string, content: string): boolean {
+  return content === starterFiles[path] || content === seedFiles[path]
 }
 
 const encoder = new TextEncoder()
@@ -160,11 +176,7 @@ export class VirtualFileSystem {
   isPristine(path: string): boolean {
     const normalized = normalizeProjectPath(path)
     const content = this.files.get(normalized)
-    return (
-      content === undefined ||
-      content === starterFiles[normalized] ||
-      content === seedFiles[normalized]
-    )
+    return content === undefined || isPristineContent(normalized, content)
   }
 
   write(path: string, content: string): number {

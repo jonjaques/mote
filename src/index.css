@@ -59,6 +59,27 @@
   --panel: oklch(0.155 0.009 255);
   --panel-raised: oklch(0.18 0.011 255);
   --cyan-dim: oklch(0.55 0.09 183);
+  /* ---- Signal channels ---------------------------------------------------------------
+     Four meanings, four emission lines on one black field. Each is a lamp, so each appears
+     as an icon, a 1px rule or a dot — almost never as a fill.
+
+       live     183  the running page, the loaded runtime, the current selection
+       write    152  something is now resident here: a file written, weights cached
+       read     253  looked at without being changed
+       net       96  bytes crossing the tab boundary, and the only moment that happens
+
+     The neutrals still obey the Cool Axis Rule (hue 235-255, chroma <= 0.015): the ramp sits
+     on top of the graphite, it does not tint it. `net` is the one warm value in the system
+     and it earns that by being the exception the product is built to make visible. */
+  --signal-live: var(--primary);
+  --signal-write: oklch(0.8 0.15 152);
+  --signal-read: oklch(0.74 0.12 253);
+  --signal-net: oklch(0.8 0.14 96);
+  /* Diagnostics. Distinct from the channels: a channel says what a thing is, these say what
+     went wrong. Extracted from five hand-repeated literals so the ramp has one home. */
+  --log-warn: oklch(0.78 0.13 80);
+  --log-error: oklch(0.73 0.16 28);
+  --log-error-ink: oklch(0.12 0.02 28);
   /* Monospace foreground for every well (editor, console, raw stream, tool code). These
      were four hand-tuned near-duplicates that had drifted 0.72-0.83 apart; at this size the
      difference read as inconsistent rendering rather than as hierarchy. */
@@ -92,6 +113,30 @@
     scrollbar-color: var(--border) transparent;
     scrollbar-width: thin;
   }
+}
+
+/* A channel class only sets `--channel`; every element that carries one decides for itself
+   whether that becomes an icon colour, a 1px rule or a fill. One token per meaning instead of
+   a bright/dim/border triplet each — the receded variants come from color-mix, which is how
+   this system has always made a value quieter. */
+.channel-live {
+  --channel: var(--signal-live);
+}
+
+.channel-write {
+  --channel: var(--signal-write);
+}
+
+.channel-read {
+  --channel: var(--signal-read);
+}
+
+.channel-net {
+  --channel: var(--signal-net);
+}
+
+.channel-idle {
+  --channel: var(--muted-foreground);
 }
 
 .mote-shell {
@@ -270,7 +315,7 @@
 
 .model-option > svg {
   width: 0.875rem;
-  color: var(--cyan-dim);
+  color: var(--channel, var(--cyan-dim));
 }
 
 /* Prebuilt Hugging Face ids run long (`Llama-3.1-8B-Instruct-q4f32_1-MLC-1k`) and the trigger
@@ -369,10 +414,15 @@
   background: var(--muted);
 }
 
+/* Gold while the bytes are still arriving from outside the tab, cyan the moment they start
+   becoming a GPU. On a cached model, or the local mirror, the gold never appears — which is
+   the honest version of the claim. The transition is on colour only; animating this bar's
+   geometry is what the design hook blocks. */
 .progress-track span {
   display: block;
   height: 100%;
-  background: var(--primary);
+  background: var(--channel, var(--primary));
+  transition: background-color 500ms ease;
 }
 
 .progress-copy {
@@ -410,12 +460,30 @@
   letter-spacing: 0.02em;
 }
 
+/* The route the bytes are taking, in the colour of the route. */
 .progress-detail span:last-child {
   min-width: 0;
   overflow: hidden;
-  color: var(--cyan-dim);
+  color: var(--channel, var(--cyan-dim));
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Resident or still over the wire, said in the picker before the choice is made. */
+.model-meta .channel-write,
+.model-meta .channel-net,
+.readout dd.channel-net {
+  color: var(--channel);
+}
+
+/* Cyan is what is live, and once the weights are here this control cannot be pressed again
+   for the rest of the session — so it stops being the loudest object in the pane and becomes
+   a readout of what is resident. */
+.model-load[data-resident] {
+  color: var(--signal-write);
+  background: color-mix(in oklch, var(--signal-write), transparent 88%);
+  border-color: color-mix(in oklch, var(--signal-write), transparent 62%);
+  opacity: 1;
 }
 
 .inline-error {
@@ -603,15 +671,23 @@
   margin: 0.45rem 0;
   padding: 0.55rem;
   color: var(--muted-foreground);
-  border: 1px solid var(--border);
+  /* The rule is the channel, receded far enough that a run of four cards still reads as a
+     list rather than as four separate alarms. */
+  border: 1px solid color-mix(in oklch, var(--channel, var(--border)), transparent 76%);
   background: color-mix(in oklch, var(--panel-raised), transparent 20%);
 }
 
+/* Left icon says what the call was, right icon says whether it finished. Both used to be the
+   same cyan, so the pair carried one bit between them. */
 .tool-call > svg {
   width: 0.8rem;
   height: 0.8rem;
   margin-top: 0.1rem;
-  color: var(--cyan-dim);
+  color: var(--muted-foreground);
+}
+
+.tool-call > svg:first-child {
+  color: color-mix(in oklch, var(--channel, var(--cyan-dim)), transparent 12%);
 }
 
 .tool-call > div {
@@ -641,14 +717,26 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+/* Deliberately close to the resting border: the icons already carry the channel, so a firmer
+   rule here only turned a round of four calls into four competing outlines. */
 .tool-complete {
-  border-color: color-mix(in oklch, var(--primary), transparent 65%);
+  border-color: color-mix(in oklch, var(--channel, var(--primary)), transparent 66%);
 }
 
-.tool-error,
-.tool-error > svg {
-  color: oklch(0.73 0.16 28);
+.tool-complete > svg:last-child {
+  color: var(--channel, var(--primary));
+}
+
+/* A failure overrides its channel outright: what the call was going to do stops mattering. */
+.tool-error {
+  color: var(--log-error);
   border-color: color-mix(in oklch, var(--destructive), transparent 55%);
+}
+
+.tool-error > svg,
+.tool-error > svg:first-child,
+.tool-error > svg:last-child {
+  color: var(--log-error);
 }
 
 .continue-button {
@@ -838,10 +926,37 @@
   box-shadow: inset 1px 0 var(--primary);
 }
 
+/* A tint per layer of the page. Chroma stays under 0.08 on purpose: this is a subordinate
+   register to the signal channels, so the three icons read as differentiated rather than as
+   three more lamps competing with the selection rule beside them. */
 .file-tree > button svg {
   width: 0.8rem;
   height: 0.8rem;
   color: var(--cyan-dim);
+}
+
+.file-tree > button.kind-html svg {
+  color: oklch(0.64 0.065 210);
+}
+
+.file-tree > button.kind-css svg {
+  color: oklch(0.62 0.07 268);
+}
+
+.file-tree > button.kind-js svg {
+  color: oklch(0.66 0.07 100);
+}
+
+/* Written this session — the tree's half of the write channel, in the same discrete-state
+   vocabulary as the editor's amber unsaved dot. */
+.file-authored {
+  display: inline-block;
+  width: 0.35rem;
+  height: 0.35rem;
+  margin-left: 0.4rem;
+  vertical-align: 0.04em;
+  background: var(--signal-write);
+  border-radius: 999px;
 }
 
 .file-tree > button span {
@@ -947,14 +1062,20 @@
   white-space: pre-wrap;
 }
 
+/* Only warn and error colour the whole line; they are the exceptions. `info` is ordinary
+   output, so it takes the read channel on its icon alone and leaves the text legible. */
+.console-info svg {
+  color: var(--signal-read);
+}
+
 .console-warn,
 .console-warn svg {
-  color: oklch(0.78 0.13 80);
+  color: var(--log-warn);
 }
 
 .console-error,
 .console-error svg {
-  color: oklch(0.73 0.16 28);
+  color: var(--log-error);
 }
 
 .workspace-status {
@@ -977,6 +1098,20 @@
 
 .workspace-status span:not(:first-child) {
   margin-left: auto;
+}
+
+/* The origin guarantees are the product's actual claim and were the faintest words on the
+   screen. They stay quiet — an invariant is not an event — but an icon makes them read as
+   asserted state instead of as a caption. */
+.status-guarantee svg {
+  width: 0.72rem;
+  height: 0.72rem;
+  color: var(--cyan-dim);
+}
+
+.status-errors {
+  color: var(--log-error);
+  font-style: normal;
 }
 
 /* ---- Session header actions, generation status, run statistics ---- */
@@ -1112,7 +1247,7 @@
 }
 
 .tool-runtime-error {
-  color: oklch(0.73 0.16 28);
+  color: var(--log-error);
   white-space: pre-wrap;
 }
 
@@ -1133,8 +1268,8 @@
 }
 
 .tab-badge-error {
-  color: oklch(0.12 0.02 28);
-  background: oklch(0.73 0.16 28);
+  color: var(--log-error-ink);
+  background: var(--log-error);
 }
 
 .segmented {
@@ -1214,7 +1349,7 @@
   display: inline-block;
   width: 0.4rem;
   height: 0.4rem;
-  background: oklch(0.78 0.13 80);
+  background: var(--log-warn);
   border-radius: 999px;
 }
 

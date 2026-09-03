@@ -1,9 +1,11 @@
 import { useState, useSyncExternalStore, type KeyboardEvent } from 'react'
 import { Braces, FileCode2, FileText, RotateCcw, Save } from 'lucide-react'
 import CodeMirror, { EditorView, type Extension } from '@uiw/react-codemirror'
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { css } from '@codemirror/lang-css'
 import { html } from '@codemirror/lang-html'
 import { javascript } from '@codemirror/lang-javascript'
+import { tags } from '@lezer/highlight'
 
 import { Button } from '@/components/ui/button'
 import { listProjectFiles, projectFS } from '@/sandbox/fs'
@@ -13,6 +15,15 @@ function fileIcon(path: string) {
   if (path.endsWith('.js')) return <Braces />
   if (path.endsWith('.html')) return <FileCode2 />
   return <FileText />
+}
+
+// A tint per layer of the page, deliberately a register below the signal channels: chroma
+// stays under 0.08 so these read as differentiated icons rather than as another lamp.
+function fileKind(path: string): string {
+  if (path.endsWith('.js') || path.endsWith('.mjs')) return 'js'
+  if (path.endsWith('.html') || path.endsWith('.htm')) return 'html'
+  if (path.endsWith('.css')) return 'css'
+  return 'other'
 }
 
 function languageFor(path: string): Extension[] {
@@ -29,11 +40,41 @@ function extensionsFor(path: string): Extension[] {
   const key = path.slice(path.lastIndexOf('.'))
   let extensions = extensionCache.get(key)
   if (!extensions) {
-    extensions = [...languageFor(path), editorTheme, EditorView.lineWrapping]
+    extensions = [
+      ...languageFor(path),
+      syntaxHighlighting(highlight),
+      editorTheme,
+      EditorView.lineWrapping,
+    ]
     extensionCache.set(key, extensions)
   }
   return extensions
 }
+
+// The editor's syntax colours, on the same cool axis as the rest of the application. This
+// used to be CodeMirror's stock dark highlight style, supplied by `theme="dark"` — magenta
+// tags, warm orange strings, green literals — which made the largest coloured region in the
+// app the one region belonging to no design system. Structure is carried by the cyan family,
+// values by a single warm note, and comments recede to 4.9:1 on the well rather than
+// disappearing. Four hues, which is the floor for code that still has to be scannable.
+const highlight = HighlightStyle.define(
+  [
+    { tag: [tags.tagName, tags.keyword, tags.modifier, tags.self], color: 'oklch(0.78 0.12 190)' },
+    { tag: [tags.function(tags.variableName), tags.definition(tags.variableName), tags.className],
+      color: 'oklch(0.84 0.08 210)' },
+    { tag: [tags.attributeName, tags.propertyName, tags.definition(tags.propertyName)],
+      color: 'oklch(0.74 0.06 245)' },
+    { tag: [tags.string, tags.attributeValue, tags.special(tags.string)], color: 'oklch(0.80 0.09 78)' },
+    { tag: [tags.number, tags.bool, tags.null, tags.unit, tags.atom, tags.color],
+      color: 'oklch(0.82 0.11 96)' },
+    { tag: [tags.comment, tags.lineComment, tags.blockComment, tags.meta],
+      color: 'oklch(0.585 0.025 250)', fontStyle: 'italic' },
+    { tag: [tags.operator, tags.punctuation, tags.bracket, tags.separator, tags.angleBracket],
+      color: 'oklch(0.62 0.02 250)' },
+    { tag: tags.invalid, color: 'oklch(0.73 0.16 28)' },
+  ],
+  { themeType: 'dark' },
+)
 
 // The editor inherits the app palette rather than shipping a second dark theme.
 const editorTheme = EditorView.theme(
@@ -106,13 +147,20 @@ export function FilesView() {
           <button
             key={file.path}
             type="button"
-            className={file.path === selected?.path ? 'is-selected' : ''}
+            className={`kind-${fileKind(file.path)}${file.path === selected?.path ? ' is-selected' : ''}`}
             aria-current={file.path === selected?.path ? 'true' : undefined}
             onClick={() => dispatch({ type: 'openFile', path: file.path })}
           >
             {fileIcon(file.path)}
             <span>{file.path}</span>
-            <small>{file.bytes} B</small>
+            {/* A green dot on any file that no longer holds its starter text — the tree's
+                version of the write channel, and the same discrete-state vocabulary as the
+                editor's amber unsaved dot. role="img" is what makes the label legal on an
+                otherwise generic element. */}
+            <small>
+              {file.bytes} B
+              {file.authored && <em className="file-authored" role="img" aria-label="Written this session" />}
+            </small>
           </button>
         ))}
       </aside>
@@ -146,7 +194,9 @@ export function FilesView() {
             className="file-editor"
             value={draft}
             height="100%"
-            theme="dark"
+            // "none", not "dark": "dark" is what was injecting the stock highlight style over
+            // ours. Everything the editor draws now comes from editorTheme and `highlight`.
+            theme="none"
             extensions={extensions}
             basicSetup={{ foldGutter: false, autocompletion: false, highlightActiveLine: true }}
             onChange={setDraft}

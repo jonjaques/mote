@@ -7,7 +7,9 @@ import {
   Monitor,
   RefreshCw,
   RotateCcw,
+  ShieldCheck,
   Smartphone,
+  SquareCode,
   TerminalSquare,
 } from 'lucide-react'
 
@@ -186,10 +188,23 @@ export function MainArea() {
         </span>
         <span>
           {consoleEntries.length} console {consoleEntries.length === 1 ? 'line' : 'lines'}
-          {errorCount > 0 ? ` · ${errorCount} ${errorCount === 1 ? 'error' : 'errors'}` : ''}
+          {errorCount > 0 && (
+            <em className="status-errors">
+              · {errorCount} {errorCount === 1 ? 'error' : 'errors'}
+            </em>
+          )}
         </span>
-        <span>Opaque origin</span>
-        <span>Scripts isolated</span>
+        {/* The two guarantees are the product's actual claim and were the faintest text on
+            screen. They stay quiet — they are invariants, not events — but they now read as
+            asserted state rather than as leftover words. */}
+        <span className="status-guarantee">
+          <ShieldCheck aria-hidden="true" />
+          Opaque origin
+        </span>
+        <span className="status-guarantee">
+          <SquareCode aria-hidden="true" />
+          Scripts isolated
+        </span>
       </footer>
     </main>
   )
