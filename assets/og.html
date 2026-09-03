@@ -1,0 +1,209 @@
+<!doctype html>
+<!-- Source for public/og.png (1200x630). Rendered by `pnpm assets`, which loads this file
+     from disk in headless Chrome, so the font is pulled straight out of node_modules and the
+     colours are the same tokens the app ships. Edit here, never the PNG. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @font-face {
+        font-family: "Inter Variable";
+        font-weight: 100 900;
+        font-display: block;
+        src: url("../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2")
+          format("woff2");
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+      }
+
+      body {
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        font-family: "Inter Variable", system-ui, sans-serif;
+        font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+        color: #e4edf2;
+        background: #06070a;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Structure, receding. The grid is the frame the mote sits inside; it fades out to the
+         right so the readout strip never has to compete with it. */
+      .field {
+        position: absolute;
+        inset: 0;
+        background-image: linear-gradient(#262c32 1px, transparent 1px),
+          linear-gradient(90deg, #262c32 1px, transparent 1px);
+        background-size: 60px 60px;
+        opacity: 0.5;
+        mask-image: radial-gradient(120% 100% at 8% 22%, #000 0%, transparent 62%);
+      }
+
+      .glow {
+        position: absolute;
+        top: -180px;
+        left: -120px;
+        width: 760px;
+        height: 760px;
+        background: radial-gradient(circle, rgba(0, 229, 206, 0.16) 0%, transparent 62%);
+      }
+
+      .sheet {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        padding: 64px 76px 52px;
+      }
+
+      .brand {
+        display: flex;
+        gap: 24px;
+        align-items: center;
+      }
+
+      .brand img {
+        width: 76px;
+        height: 76px;
+      }
+
+      .brand h1 {
+        font-size: 68px;
+        font-weight: 620;
+        letter-spacing: -0.035em;
+        line-height: 1;
+      }
+
+      .brand span {
+        padding: 7px 12px 8px;
+        margin-left: 6px;
+        font-size: 19px;
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        color: #00e5ce;
+        text-transform: uppercase;
+        border: 1px solid rgba(0, 229, 206, 0.4);
+        border-radius: 5px;
+      }
+
+      h2 {
+        max-width: 21ch;
+        margin-top: 56px;
+        font-size: 56px;
+        font-weight: 600;
+        letter-spacing: -0.03em;
+        line-height: 1.08;
+      }
+
+      h2 em {
+        font-style: normal;
+        color: #00e5ce;
+      }
+
+      p {
+        max-width: 60ch;
+        margin-top: 24px;
+        font-size: 25px;
+        line-height: 1.45;
+        color: #879198;
+      }
+
+      /* A readout, not a feature list: the same three facts the runtime panel shows while it
+         works, in the same monospace it shows them in. */
+      .readout {
+        display: flex;
+        margin-top: auto;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        border-top: 1px solid #262c32;
+      }
+
+      .readout div {
+        flex: 1;
+        padding: 26px 0 0;
+      }
+
+      .readout div + div {
+        padding-left: 28px;
+        border-left: 1px solid #262c32;
+      }
+
+      .readout dt {
+        font-size: 14px;
+        letter-spacing: 0.14em;
+        color: #4f585f;
+        text-transform: uppercase;
+      }
+
+      .readout dd {
+        margin-top: 9px;
+        font-size: 20px;
+        color: #a9c3cb;
+        white-space: nowrap;
+      }
+
+      .readout .live dd {
+        color: #00e5ce;
+      }
+
+      .readout .none dd {
+        color: #69d98d;
+      }
+
+      .host {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        justify-content: flex-end;
+        padding-top: 26px;
+        font-size: 21px;
+        text-align: right;
+      }
+
+      .host i {
+        width: 9px;
+        height: 9px;
+        background: #00e5ce;
+        box-shadow: 0 0 14px rgba(0, 229, 206, 0.7);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="field"></div>
+    <div class="glow"></div>
+    <div class="sheet">
+      <header class="brand">
+        <img src="mark.svg" alt="" />
+        <h1>Mote</h1>
+        <span>Local runtime</span>
+      </header>
+
+      <h2>A complete AI development environment <em>inside your browser</em>.</h2>
+      <p>
+        A local model on WebGPU writes the code, runs it, and renders it — in one tab. No server,
+        no API keys, no prompt ever sent anywhere.
+      </p>
+
+      <div class="readout">
+        <div class="live">
+          <dt>Runtime</dt>
+          <dd>WebGPU · WebLLM</dd>
+        </div>
+        <div>
+          <dt>Weights</dt>
+          <dd>cached in-browser</dd>
+        </div>
+        <div class="none">
+          <dt>Your code</dt>
+          <dd>never leaves the tab</dd>
+        </div>
+        <div>
+          <dt></dt>
+          <dd class="host"><i></i>mote.jonjaques.com</dd>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

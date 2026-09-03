@@ -2,9 +2,43 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Mote</title>
+
+    <title>Mote — a complete AI development environment inside your browser</title>
+    <meta
+      name="description"
+      content="Mote is a coding agent that runs entirely in one browser tab. A local model on WebGPU writes HTML, CSS and JavaScript, runs it, and renders it in a sandboxed frame. No server, no API keys, no prompt ever sent anywhere."
+    />
+    <link rel="canonical" href="https://mote.jonjaques.com/" />
+
+    <!-- Dark is the only theme Mote ships; declaring it here keeps the browser from painting a
+         white canvas behind the shell during the first frames of a cold load. -->
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#06070a" />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-title" content="Mote" />
+
+    <!-- Absolute URLs: link scrapers do not resolve relative paths. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Mote" />
+    <meta property="og:url" content="https://mote.jonjaques.com/" />
+    <meta property="og:title" content="Mote — a complete AI development environment inside your browser" />
+    <meta
+      property="og:description"
+      content="A local model on WebGPU writes the code, runs it, and renders it — in one tab. No server, no API keys, no prompt ever sent anywhere."
+    />
+    <meta property="og:image" content="https://mote.jonjaques.com/og.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Mote: a complete AI development environment inside your browser. Runtime WebGPU and WebLLM, weights cached in-browser, your code never leaves the tab."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
     <div id="root"></div>

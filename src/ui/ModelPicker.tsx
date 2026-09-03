@@ -20,7 +20,17 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { getStorageEstimate, parseLoadReport, type StorageEstimate } from '@/llm/engine'
-import { fetchModelDownload, type AvailableModel, type ModelDownload } from '@/llm/models'
+import {
+  classifyFit,
+  describeFit,
+  fetchModelDownload,
+  recommendModels,
+  sortModels,
+  type AvailableModel,
+  type DeviceProfile,
+  type ModelDownload,
+  type ModelFit,
+} from '@/llm/models'
 import { useAppState } from '@/state'
 
 interface ModelPickerProps {
@@ -38,8 +48,7 @@ function formatBytes(value?: number): string {
   return `${(value / 1_024 ** exponent).toFixed(exponent > 2 ? 1 : 0)} ${units[exponent]}`
 }
 
-function vramLabel(model: AvailableModel): string {
-  const megabytes = model.record.vram_required_MB
+function gigabytes(megabytes: number | undefined): string {
   return megabytes ? `${(megabytes / 1_024).toFixed(1)} GB` : '—'
 }
 
@@ -78,22 +87,65 @@ function describeLoad(
   return { label: report.text || 'Checking GPU…', channel: 'idle' }
 }
 
-function ModelOption({ model, cached }: { model: AvailableModel; cached: boolean }) {
+// The whole prebuilt catalog is offered, which is 159 chat models, so the menu's job is no
+// longer "pick a label" but "tell me what this machine can actually hold". Every row is filed
+// under what the device says about it; the two groups a visitor cannot use are still listed,
+// because a menu that silently omits the 8B model is less honest than one that shows it greyed.
+const GROUPS: { fit: ModelFit; label: string }[] = [
+  { fit: 'proven', label: 'Recommended for this device' },
+  { fit: 'fits', label: 'Fits this device' },
+  { fit: 'tight', label: 'Tight fit — may run out of memory' },
+  { fit: 'over', label: 'Beyond this device' },
+  { fit: 'blocked', label: 'This GPU cannot run these' },
+]
+
+function ModelOption({
+  model,
+  cached,
+  fit,
+}: {
+  model: AvailableModel
+  cached: boolean
+  fit: ModelFit
+}) {
   // The source icon carries the channel, so the one question this menu is really asking —
   // which of these costs me a download? — is answered before the label is read. Colouring the
-  // `small` line instead would put four green and gold rows in competition.
+  // `small` line instead would put a hundred green and gold rows in competition.
   const channel = cached ? 'channel-write' : model.source === 'network' ? 'channel-net' : ''
+  const detail = [
+    model.quantization,
+    `${gigabytes(model.vramMB)} VRAM`,
+    model.contextNote,
+    model.role,
+    cached ? 'cached' : model.source === 'local' ? 'on disk' : undefined,
+  ].filter(Boolean)
+
   return (
-    <span className={`model-option ${channel}`}>
+    <span className={`model-option ${fit === 'over' || fit === 'blocked' ? 'is-unavailable' : channel}`}>
       {model.source === 'local' ? <Database /> : <HardDriveDownload />}
       <span>
         {model.label}
-        <small>
-          {vramLabel(model)} VRAM
-          {cached ? ' · cached' : model.source === 'local' ? ' · on disk' : ' · download'}
-        </small>
+        <small>{detail.join(' · ')}</small>
       </span>
     </span>
+  )
+}
+
+function DeviceLine({ device }: { device: DeviceProfile }) {
+  // Everything WebGPU will admit to about the machine, plus the number Mote inferred from it.
+  // The budget is an estimate and is labelled as one; PRODUCT.md's visitor is an engineer who
+  // would rather see the guess than be silently steered by it.
+  const adapter = [device.vendor, device.architecture].filter(Boolean).join(' · ')
+  const facts = [
+    adapter || device.description || 'WebGPU adapter',
+    device.shaderF16 ? 'shader-f16' : 'no shader-f16',
+    `~${gigabytes(device.budgetMB)} budget`,
+  ]
+  return (
+    <p className="device-line">
+      <Cpu aria-hidden="true" />
+      <span>{facts.join(' · ')}</span>
+    </p>
   )
 }
 
@@ -112,8 +164,17 @@ export function ModelPicker({ onLoad, onDelete }: ModelPickerProps) {
   const isCached = state.model.cachedIds.has(state.model.selectedId)
   const isLoaded = state.model.loadedId === state.model.selectedId
   const isLoading = state.model.phase === 'loading' || state.model.phase === 'checking'
-  const localModels = state.models.filter((model) => model.source === 'local')
-  const networkModels = state.models.filter((model) => model.source === 'network')
+
+  const device =
+    state.preflight.status === 'ready' && state.preflight.verdict.ok
+      ? state.preflight.verdict.device
+      : undefined
+  const selectedFit = selected ? classifyFit(selected, device) : undefined
+  const fitWarning = selectedFit ? describeFit(selectedFit, device) : undefined
+  const recommended = recommendModels(state.models, device).best
+
+  const localModels = sortModels(state.models.filter((model) => model.source === 'local'))
+  const networkModels = sortModels(state.models.filter((model) => model.source === 'network'))
 
   useEffect(() => {
     void getStorageEstimate().then(setStorage)
@@ -157,28 +218,50 @@ export function ModelPicker({ onLoad, onDelete }: ModelPickerProps) {
               <SelectLabel>On this machine</SelectLabel>
               {localModels.map((model) => (
                 <SelectItem key={model.id} value={model.id}>
-                  <ModelOption model={model} cached={state.model.cachedIds.has(model.id)} />
+                  <ModelOption
+                    model={model}
+                    cached={state.model.cachedIds.has(model.id)}
+                    fit={classifyFit(model, device)}
+                  />
                 </SelectItem>
               ))}
             </SelectGroup>
           )}
-          {networkModels.length > 0 && (
-            <SelectGroup>
-              <SelectLabel>Hugging Face</SelectLabel>
-              {networkModels.map((model) => (
-                <SelectItem key={model.id} value={model.id}>
-                  <ModelOption model={model} cached={state.model.cachedIds.has(model.id)} />
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          )}
+          {GROUPS.map(({ fit, label }) => {
+            const models = networkModels.filter((model) => classifyFit(model, device) === fit)
+            if (!models.length) return null
+            return (
+              <SelectGroup key={fit}>
+                <SelectLabel>
+                  {label} <span className="group-count">{models.length}</span>
+                </SelectLabel>
+                {models.map((model) => (
+                  <SelectItem
+                    key={model.id}
+                    value={model.id}
+                    // Selecting one would only lead to a refused Load; the group heading has
+                    // already said why, and `assertModelSupported` still guards the URL path.
+                    disabled={fit === 'over' || fit === 'blocked'}
+                  >
+                    <ModelOption
+                      model={model}
+                      cached={state.model.cachedIds.has(model.id)}
+                      fit={fit}
+                    />
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            )
+          })}
         </SelectContent>
       </Select>
+
+      {device && <DeviceLine device={device} />}
 
       <div className="model-meta">
         <span>
           <Cpu aria-hidden="true" />
-          {selected ? `${vramLabel(selected)} VRAM` : 'VRAM varies'}
+          {selected ? `${gigabytes(selected.vramMB)} VRAM` : 'VRAM varies'}
         </span>
         {/* Resident or still over the wire: the same two channels the load bar will use, so
             the cost of a choice is legible before it is made. */}
@@ -203,7 +286,28 @@ export function ModelPicker({ onLoad, onDelete }: ModelPickerProps) {
             {selected?.source === 'local' ? 'This machine’s mirror' : 'huggingface.co'} · once,
             then cached here
           </dd>
+          {recommended && recommended.id !== selected?.id && (
+            <>
+              <dt>Best fit</dt>
+              <dd>
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => dispatch({ type: 'selectModel', id: recommended.id })}
+                >
+                  {recommended.label}
+                </button>
+              </dd>
+            </>
+          )}
         </dl>
+      )}
+
+      {fitWarning && !isLoading && (
+        <p className="fit-warning" role="note">
+          <TriangleAlert aria-hidden="true" />
+          <span>{fitWarning}</span>
+        </p>
       )}
 
       {isLoading && (
@@ -257,7 +361,14 @@ export function ModelPicker({ onLoad, onDelete }: ModelPickerProps) {
             className="model-load"
             data-resident={isLoaded || undefined}
             onClick={onLoad}
-            disabled={!selected || isLoading || isLoaded || state.generating}
+            disabled={
+              !selected ||
+              isLoading ||
+              isLoaded ||
+              state.generating ||
+              selectedFit === 'over' ||
+              selectedFit === 'blocked'
+            }
           >
             {isLoading ? <LoaderCircle className="animate-spin" /> : isLoaded ? <Check /> : null}
             {isLoaded ? 'Loaded' : isLoading ? 'Loading' : loaded ? 'Switch model' : 'Load model'}

@@ -42,8 +42,9 @@ The emotional core: **a surprisingly powerful machine, reduced to a mote.**
 
 ## Operating Context
 
-- Reached at a public static URL. First visit means downloading **gigabytes of weights
-  from Hugging Face** onto an unknown GPU. That cold start is not a loading screen to be
+- Reached at **https://mote.jonjaques.com**, a static Cloudflare Workers deploy (assets only,
+  no Worker entry point) built from `main` on GitHub. First visit means downloading **hundreds of megabytes to gigabytes of
+  weights from Hugging Face** onto an unknown GPU. That cold start is not a loading screen to be
   hidden — for this audience it is a substantial share of the total time on the page, and
   the most fragile part of the demo.
 - Later visits load from the browser's Cache API. Cache state, storage estimate and
@@ -83,15 +84,29 @@ no replayed session, no canned demo. Being upfront about the hardware requiremen
 of the technical credibility; faking the demo would contradict the one thing the product
 is trying to prove.
 
+Settled since:
+
+- **Deploy target: Cloudflare Workers static assets at `mote.jonjaques.com`, from `main`.** The local
+  mirror does not ship — `loadLocalRecords()` is gated on `import.meta.env.DEV`, so a
+  deployed visitor is always served from Hugging Face.
+- **A visitor is offered the whole prebuilt catalogue, filed by what their device can hold.**
+  The picker opens on the smallest model measured to build whole pages (the 1.5B coder,
+  830 MB) rather than the most capable one, and names the best fit alongside it. Only ids
+  with pass rates in `HANDOFF.md` may be labelled "recommended".
+- **The page carries an optional Google Analytics tag**, injected at build time only when
+  `GA_MEASUREMENT_ID` is set. It reports page views and three events — a model load, a load
+  failure, a preflight failure. Prompts, model output and file contents are never sent. The
+  product's claim is about the *model* — no inference, no prompt and no generated code leaves
+  the tab — and the public copy is worded to say exactly that and not more.
+
 Open decisions, not to be invented:
 
-- **No deploy target chosen.** Host, domain, and whether the mirror ships at all are
-  undecided.
 - **The Hugging Face-served path has never been measured.** Every recorded number came
   from the local mirror. Cold-start time, failure modes and rate-limit behavior on the
   public path are unknown.
-- Which model a public visitor is offered first is undecided; the local-mirror default
-  reflects what is on this machine, not what a stranger should download.
+- **The initial JavaScript payload is 2.3 MB gzipped** (6.3 MB parsed) because WebLLM is a
+  main-thread import, and it ships a second time inside the worker chunk. Nothing renders
+  until it arrives. Whether that is worth an engine-loading refactor is undecided.
 
 ## Brand Commitments
 

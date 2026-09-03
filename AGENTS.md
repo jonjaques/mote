@@ -58,7 +58,7 @@ pnpm cdp:trace --url "http://localhost:5180/?model=Qwen3-0.6B-q4f16_1-MLC&autolo
 |---|---|
 | `src/llm/engine.ts` | `WebWorkerMLCEngine` singleton, cache, persist, interrupt |
 | `src/llm/worker.ts` | `WebWorkerMLCEngineHandler` only |
-| `src/llm/models.ts` | curated ids, local-mirror merge, overrides, VRAM/feature guards |
+| `src/llm/models.ts` | catalog, id parsing, device profile, fit classification, load gate |
 | `src/llm/tools.ts` | tool schemas, structural tag, block scanner, turn context, run |
 | `src/llm/agent.ts` | prompt → stream → run blocks as they close → `<tool_response>` loop |
 | `src/llm/prompts.ts` | system prompts |
@@ -72,6 +72,13 @@ pnpm cdp:trace --url "http://localhost:5180/?model=Qwen3-0.6B-q4f16_1-MLC&autolo
 | `src/ui/*` | views; they subscribe to the singletons above |
 | `scripts/cdp.mjs` | Chrome launch and CDP session plumbing shared by both harness scripts |
 | `scripts/cdp-agent.mjs` | scenario runner and sandbox probes |
+| `src/sw.js` | the service worker source; emitted to `dist/sw.js` by the build |
+| `src/pwa.ts` | registration and the "a new build is waiting" store |
+| `src/analytics.ts` | the only place an analytics event may be sent from |
+| `assets/*` | brand sources; `pnpm assets` renders them into `public/` |
+| `scripts/render-assets.mjs` | headless-Chrome rasteriser for those sources |
+| `public/_headers` | response headers for the deployed static assets |
+| `wrangler.jsonc` | what Cloudflare Workers Builds uploads, and under what name |
 
 Do not introduce a store library. Do not duplicate file or console state in
 React.
@@ -102,7 +109,24 @@ React.
   `new Worker(new URL("./worker.ts", import.meta.url), { type: "module" })`.
 - `appConfig.model_list = [...prebuiltAppConfig.model_list, ...localRecords]`.
   Suffix local `model_id` values with ` (local)` so both sources coexist, and
-  apply curated overrides by **base id**, before the suffix.
+  apply overrides by **base id**, before the suffix.
+- The picker offers **every prebuilt chat model** (159 of the 163 records; the
+  four `snowflake-arctic-embed` entries are embedding models and throw on
+  `reload`). Rows are grouped by what the device can hold, not by curation.
+- **Fit is decided by the quantisation, not by `required_features`.** Only 29 of
+  the 85 `f16` records declare `shader-f16`, so trusting the field offers 56
+  unrunnable models to a GPU without half-precision and the failure surfaces as
+  a shader compile error deep inside the load.
+- The VRAM budget is inferred — WebGPU exposes no VRAM figure, deliberately —
+  from `navigator.deviceMemory` (capped at 8 GB by the spec, absent outside
+  Chrome) at 75%. That lands on the 6 GB this repo measured the 7B against. It
+  is an estimate and the interface says so; do not present it as a measurement.
+- `PROVEN_MODEL_IDS` is the only thing allowed to produce a "recommended" label,
+  because it is the only list backed by pass rates in `HANDOFF.md`. Adding an id
+  there is a claim; measure it with `pnpm cdp:agent` first.
+- Context overrides stay keyed to the models they were measured on. The compiled
+  kernels carry their own maximum (`…-ctx4k_cs1k-webgpu.wasm`), so raising a
+  window by family would fail at load on some members of that family.
 - Resolve mirror `model` / `model_lib` to **absolute same-origin URLs**
   before passing them to WebLLM. Root-relative `/models/…` throws
   `Invalid URL` inside its cache helpers.
@@ -194,6 +218,54 @@ React.
   The host app may keep Inter; generated pages should use a system stack.
 - Seed-example is **dev-only**. Do not ship it behind `import.meta.env.DEV`
   being false.
+
+## Production build and deploy
+
+**Cloudflare Workers with static assets** — not Pages — built from `main` at
+`https://mote.jonjaques.com`. Workers Builds runs `pnpm build` and then
+`wrangler versions upload` (`deploy` on the production branch), and wrangler
+reads `wrangler.jsonc`: no `main`, `assets.directory` of `./dist`, and a `name`
+that must match the Worker the repository is connected to. Node is pinned by
+`.node-version` (verified on 22.23.2), pnpm by `packageManager`.
+
+There is deliberately no Worker entry point. Mote's one inviolable claim is that
+nothing runs outside the tab; a `main` would be the first step in breaking it.
+
+- **The local mirror is development-only.** `loadLocalRecords()` returns `[]` unless
+  `import.meta.env.DEV`. A deploy must never fetch `/models/index.json`: it is a guaranteed
+  miss, and that miss is a 404 only while `assets.not_found_handling` stays at its default
+  of `"none"`. Set it to `single-page-application` — the reflex for a Vite build — and the
+  same request answers 200 with the HTML shell, which parsed as a record list is the cache
+  poisoning AGENTS has warned about since the beginning. There is a test for this.
+- **Analytics are a build variable.** `analytics()` in `vite.config.ts` injects the gtag
+  pair into `index.html` only when `GA_MEASUREMENT_ID` (or `VITE_…`) is set *and* matches
+  `G-XXXXXXXXXX`. The shape check is not cosmetic: the value comes from a deploy dashboard
+  and lands inside an inline `<script>`. Events go through `src/analytics.ts` and carry
+  model ids and durations only — never prompts, output, or file contents.
+- **`sw.js` must keep its blind spots.** A service worker sits in front of every fetch a
+  controlled page makes, including the WebLLM worker's shard fetches. It handles same-origin
+  GETs only, and never `/models/*`, never a cross-origin URL, never a range request. Not
+  calling `respondWith` leaves the browser's own networking alone; that is the default for
+  everything else. Do not add a runtime-caching rule "for completeness" — a 4 GB download
+  duplicated into a second cache blows the origin quota and evicts the copy that matters.
+- **No `script-src` in the host CSP.** A policy on the host document is inherited by srcdoc
+  children, and the sandbox *is* a srcdoc document that must run inline script and
+  `new Function`. Measured against the real iframe: `default-src 'self'; script-src 'self'`
+  kills the sandbox silently; `object-src 'none'; base-uri 'self'; frame-ancestors 'none';
+  form-action 'self'` does not. `public/_headers` ships the second set and nothing more.
+  The frame keeps its own far stricter policy, and that is the boundary that matters.
+- **`dist/sw.js` is generated.** `serviceWorker()` reads `src/sw.js`, substitutes the
+  precache list and a build id hashed from the asset names *and* the emitted `index.html`
+  (the one precached file whose name never changes), and emits it. The plugin is
+  `enforce: 'post'` because Vite's own HTML plugin emits `index.html` during
+  `generateBundle`. It never calls `skipWaiting` on install: the running tab holds lazy
+  chunks from the build it loaded. The waiting worker takes over when the visitor presses
+  the "Update ready" chip in the brand header.
+- **Brand assets are committed build outputs.** `assets/mark.svg`, `assets/icon-maskable.svg`
+  and `assets/og.html` are the sources; `pnpm assets` renders the PNGs and the favicon with
+  headless Chrome. Edit the source and re-render — never hand-edit a file in `public/`.
+- **`/sw.js` must not be cached.** `_headers` sets `max-age=0, must-revalidate` for it. A
+  cached service worker is one no deploy can replace.
 
 ## Verification
 

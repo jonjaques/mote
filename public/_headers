@@ -1,0 +1,41 @@
+# Response headers for Cloudflare Workers static assets. Vite copies this file from public/
+# into dist/, which is the assets directory wrangler.jsonc points at; Workers parses it there
+# rather than serving it, and what it sets takes precedence over Cloudflare's own defaults.
+# Rules are matched in order; every matching block is applied.
+#
+# Why there is no script-src here, which is the directive a CSP is usually written for:
+# a policy delivered on the host document is inherited by srcdoc children, and Mote's
+# sandbox *is* a srcdoc document that has to run inline script and `new Function` (run_js).
+# Measured, with the real iframe attributes and the real sandbox CSP:
+#
+#   (no header)                                        -> inline + eval run
+#   default-src 'self'; script-src 'self'; …           -> sandbox silently dead
+#   object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'
+#                                                      -> inline + eval run
+#
+# So the directives below are the ones that harden the host without reaching into the frame.
+# The frame keeps its own far stricter policy (default-src 'none', connect-src 'none'),
+# written in src/sandbox/document.ts, and that is the boundary that actually matters.
+/*
+  Content-Security-Policy: object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Cross-Origin-Opener-Policy: same-origin
+  Permissions-Policy: accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()
+
+# Hashed by the bundler, so the name changes whenever the bytes do.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The one file that must never be served stale: a cached service worker cannot be replaced
+# by the deploy that would have replaced it.
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate
+
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/manifest.webmanifest
+  Cache-Control: public, max-age=3600
