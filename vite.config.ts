@@ -7,6 +7,16 @@ import { defineConfig, type Plugin } from 'vite'
 
 import tailwindcss from '@tailwindcss/vite'
 
+function sendMissing(
+  response: { statusCode: number; setHeader(name: string, value: string): void; end(body: string): void },
+  relativePath: string,
+) {
+  // Vite's HTML fallback would cache as a "successful" config fetch and break reload().
+  response.statusCode = 404
+  response.setHeader('Content-Type', 'application/json')
+  response.end(JSON.stringify({ error: 'Model artifact not found', path: relativePath }))
+}
+
 function serveModels(): Plugin {
   const modelsRoot = path.resolve(import.meta.dirname, 'models')
 
@@ -20,9 +30,13 @@ function serveModels(): Plugin {
         }
 
         let filePath: string
+        let relativePath: string
         try {
           const pathname = decodeURIComponent(new URL(request.url, 'http://localhost').pathname)
-          filePath = path.resolve(modelsRoot, pathname.slice('/models/'.length))
+          relativePath = pathname
+            .slice('/models/'.length)
+            .replace('/resolve/main/', '/')
+          filePath = path.resolve(modelsRoot, relativePath)
         } catch {
           response.statusCode = 400
           response.end('Invalid model path')
@@ -40,7 +54,7 @@ function serveModels(): Plugin {
         void stat(filePath)
           .then((info) => {
             if (!info.isFile()) {
-              next()
+              sendMissing(response, relativePath)
               return
             }
 
@@ -55,7 +69,7 @@ function serveModels(): Plugin {
             )
             createReadStream(filePath).pipe(response)
           })
-          .catch(() => next())
+          .catch(() => sendMissing(response, relativePath))
       })
     },
   }

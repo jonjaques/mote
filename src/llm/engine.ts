@@ -65,8 +65,22 @@ export async function loadModel(
   const prepared = await prepareEngine()
   await assertModelSupported(model)
   prepared.engine.setInitProgressCallback(onProgress)
-  await prepared.engine.reload(model.id, getChatOverrides(model))
+
+  try {
+    await prepared.engine.reload(model.id, getChatOverrides(model))
+  } catch (error) {
+    if (!isPoisonedCacheError(error)) throw error
+    // A previous miss cached Vite's HTML shell under webllm/config. Drop it and retry once.
+    await deleteModelAllInfoInCache(model.id, prepared.appConfig)
+    await prepared.engine.reload(model.id, getChatOverrides(model))
+  }
+
   return prepared.engine
+}
+
+function isPoisonedCacheError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes("Unexpected token '<'") || message.includes('is not valid JSON')
 }
 
 export async function getCachedModelIds(models: AvailableModel[]): Promise<Set<string>> {

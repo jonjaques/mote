@@ -54,6 +54,15 @@ function asAvailable(record: ModelRecord, source: ModelSource, baseId = record.m
   }
 }
 
+function toAbsoluteModelUrl(url: string): string {
+  const absolute = new URL(url, window.location.origin)
+  if (!/\/resolve\/[^/]+\//.test(absolute.pathname)) {
+    const root = absolute.pathname.endsWith('/') ? absolute.pathname : `${absolute.pathname}/`
+    absolute.pathname = `${root}resolve/main/`
+  }
+  return absolute.href
+}
+
 function isModelRecord(value: unknown): value is ModelRecord {
   if (!value || typeof value !== 'object') return false
   const record = value as Partial<ModelRecord>
@@ -76,7 +85,9 @@ async function loadLocalRecords(): Promise<ModelRecord[]> {
       const baseId = record.model_id
       return withOverrides({
         ...record,
-        model: new URL(record.model, window.location.origin).href,
+        // WebLLM's cleanModelUrl appends resolve/main/ to any URL that lacks it.
+        // Put that segment in the record so cache keys and on-disk paths stay aligned.
+        model: toAbsoluteModelUrl(record.model),
         model_id: `${baseId}${LOCAL_SUFFIX}`,
         model_lib: new URL(record.model_lib, window.location.origin).href,
       })

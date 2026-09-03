@@ -21,7 +21,10 @@ an HTML/CSS/JS project that renders in a sandboxed iframe. No server, no API key
   multi-GB copy per build is unacceptable. The `serveModels()` middleware in
   `vite.config.ts` streams `/models/<id>/<file>` in dev only.
 - WebLLM cache helpers fetch Hugging Face-shaped paths (`…/resolve/main/<file>`).
-  The middleware rewrites that segment onto the on-disk mirror layout.
+  The middleware rewrites that segment onto the on-disk mirror layout. Never
+  `next()` a `/models/*` miss to Vite’s HTML fallback — a 200 `index.html` gets
+  cached as `mlc-chat-config.json` and every later load throws
+  `Unexpected token '<'`.
 - If a new Vite 8 worker fails to start, add `optimizeDeps.exclude: ["@mlc-ai/web-llm"]`.
   Do not do this preemptively.
 
