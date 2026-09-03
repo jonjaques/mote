@@ -8,9 +8,7 @@
 // plus Network.enable on every attached session (page, dedicated worker, service worker), is
 // what sees all of it.
 //
-// Chrome 136+ refuses --remote-debugging-port on the default profile, so this always launches a
-// separate one (--profile, default .cdp-profile/). Bytes it caches land in THAT profile's Cache
-// API — good as a reproducible prewarm/benchmark target, useless for warming your daily Chrome.
+// Launch, profile and session plumbing live in cdp.mjs and are shared with cdp-agent.mjs.
 //
 // Usage
 //   node scripts/cdp-trace.mjs --url https://chat.webllm.ai --send hi
@@ -24,17 +22,16 @@
 //   --timeout <s>     hard stop (default 900)
 //   --out <file>      JSON trace (default cdp-trace.json)
 
-import { spawn } from "node:child_process";
 import { writeFile } from "node:fs/promises";
-import net from "node:net";
-import path from "node:path";
 import { parseArgs } from "node:util";
+
+import { DEFAULT_CHROME, autoAttach, launchChrome, openPage, sleep } from "./cdp.mjs";
 
 const { values: opts } = parseArgs({
   options: {
     url: { type: "string", default: "https://chat.webllm.ai" },
     headed: { type: "boolean", default: false },
-    chrome: { type: "string", default: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" },
+    chrome: { type: "string", default: DEFAULT_CHROME },
     profile: { type: "string", default: ".cdp-profile" },
     send: { type: "string" },
     idle: { type: "string", default: "20" },
@@ -63,91 +60,7 @@ function kindOf(url) {
   return "other";
 }
 
-const freePort = () =>
-  new Promise((resolve) => {
-    const s = net.createServer();
-    s.listen(0, "127.0.0.1", () => {
-      const { port } = s.address();
-      s.close(() => resolve(port));
-    });
-  });
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-async function waitForDevtools(port, ms = 20000) {
-  const until = Date.now() + ms;
-  while (Date.now() < until) {
-    try {
-      return await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
-    } catch {
-      await sleep(200);
-    }
-  }
-  throw new Error("Chrome did not open its DevTools endpoint in time");
-}
-
-// Minimal flat-session CDP client: one browser-level socket, sessionId routes to targets.
-class CDP {
-  constructor(wsUrl) {
-    this.ws = new WebSocket(wsUrl);
-    this.nextId = 0;
-    this.pending = new Map();
-    this.listeners = [];
-  }
-  open() {
-    return new Promise((resolve, reject) => {
-      this.ws.onopen = () => resolve();
-      this.ws.onerror = (e) => reject(new Error(`websocket error: ${e.message ?? e}`));
-      this.ws.onmessage = (e) => this.dispatch(JSON.parse(e.data));
-    });
-  }
-  send(method, params = {}, sessionId) {
-    const id = ++this.nextId;
-    this.ws.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
-    return new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
-  }
-  dispatch(msg) {
-    if (msg.id !== undefined) {
-      const p = this.pending.get(msg.id);
-      this.pending.delete(msg.id);
-      if (!p) return;
-      if (msg.error) p.reject(new Error(`${msg.error.message} (${msg.error.code})`));
-      else p.resolve(msg.result);
-      return;
-    }
-    for (const fn of this.listeners) fn(msg);
-  }
-  on(fn) {
-    this.listeners.push(fn);
-  }
-}
-
 async function main() {
-  const port = await freePort();
-  const profile = path.resolve(opts.profile);
-  const chrome = spawn(
-    opts.chrome,
-    [
-      `--remote-debugging-port=${port}`,
-      `--user-data-dir=${profile}`,
-      "--no-first-run",
-      "--no-default-browser-check",
-      "--disable-extensions",
-      "--enable-unsafe-webgpu",
-      "--ignore-gpu-blocklist",
-      ...(opts.headed ? [] : ["--headless=new"]),
-      "about:blank",
-    ],
-    { stdio: ["ignore", "ignore", "ignore"] },
-  );
-  const shutdown = () => {
-    if (!chrome.killed) chrome.kill("SIGTERM");
-  };
-  process.on("SIGINT", () => {
-    shutdown();
-    process.exit(130);
-  });
-
   const trace = {
     url: opts.url,
     startedAt: new Date().toISOString(),
@@ -157,34 +70,21 @@ async function main() {
     summary: {},
   };
   const requests = new Map(); // requestId -> record
-  const sessions = new Map(); // sessionId -> targetInfo
   let lastActivity = 0;
 
+  const { cdp, version, close } = await launchChrome({ chrome: opts.chrome, profile: opts.profile, headless: !opts.headed });
+  trace.chrome = version.Browser;
   try {
-    const version = await waitForDevtools(port);
-    trace.chrome = version.Browser;
-    const cdp = new CDP(version.webSocketDebuggerUrl);
-    await cdp.open();
-
-    cdp.on(async (msg) => {
-      const { method, params, sessionId } = msg;
-      if (method === "Target.attachedToTarget") {
-        const { sessionId: sid, targetInfo, waitingForDebugger } = params;
-        sessions.set(sid, targetInfo);
+    // Network.enable must land before runIfWaitingForDebugger or a worker's first shard is missed.
+    const sessions = autoAttach(cdp, {
+      onSession: async (sid, targetInfo) => {
         trace.targets.push({ type: targetInfo.type, url: targetInfo.url });
-        // Order matters: the target is paused until runIfWaitingForDebugger, and we want the
-        // network hooks live before a worker's first fetch, otherwise early shards are missed.
         await cdp.send("Network.enable", {}, sid).catch(() => {});
-        await cdp
-          .send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, sid)
-          .catch(() => {});
-        if (waitingForDebugger) await cdp.send("Runtime.runIfWaitingForDebugger", {}, sid).catch(() => {});
-        return;
-      }
-      if (method === "Target.detachedFromTarget") {
-        sessions.delete(params.sessionId);
-        return;
-      }
+      },
+    });
+
+    cdp.on((msg) => {
+      const { method, params, sessionId } = msg;
       if (!method?.startsWith("Network.")) return;
       const target = sessions.get(sessionId);
       if (method === "Network.requestWillBeSent") {
@@ -230,31 +130,7 @@ async function main() {
       }
     });
 
-    await cdp.send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: true, flatten: true });
-    const { targetId } = await cdp.send("Target.createTarget", { url: opts.url });
-
-    // The page session arrives asynchronously via attachedToTarget.
-    let pageSession;
-    for (let i = 0; i < 100 && !pageSession; i++) {
-      pageSession = [...sessions.entries()].find(([, t]) => t.targetId === targetId)?.[0];
-      if (!pageSession) await sleep(100);
-    }
-    if (!pageSession) throw new Error("page target never attached");
-
-    const evaluate = async (expression) => {
-      const { result, exceptionDetails } = await cdp.send(
-        "Runtime.evaluate",
-        { expression, awaitPromise: true, returnByValue: true },
-        pageSession,
-      );
-      if (exceptionDetails) throw new Error(exceptionDetails.text + ": " + (exceptionDetails.exception?.description ?? ""));
-      return result.value;
-    };
-
-    for (let i = 0; i < 300; i++) {
-      if ((await evaluate("document.readyState").catch(() => "")) === "complete") break;
-      await sleep(100);
-    }
+    const { pageSession, evaluate } = await openPage(cdp, sessions, opts.url);
     await sleep(1500); // let the SPA hydrate before poking it
     const gpu = await evaluate(
       "navigator.gpu ? navigator.gpu.requestAdapter().then(a => a ? (a.info?.vendor + ' ' + a.info?.architecture) : 'no adapter') : 'no navigator.gpu'",
@@ -361,9 +237,8 @@ async function main() {
       console.log(`  service worker: ${trace.cache.serviceWorker ?? "none"}`);
     }
     console.log(`trace written to ${opts.out}`);
-    await cdp.send("Browser.close").catch(() => {});
   } finally {
-    shutdown();
+    await close();
   }
 }
 

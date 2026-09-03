@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 
+import { setAutomationGenerating, setAutomationStatus } from '@/automation'
 import {
   deleteCachedModel,
   getCachedModelIds,
@@ -10,18 +11,6 @@ import { FAST_MODEL_ID } from '@/llm/models'
 import { AppStateProvider, useAppState } from '@/state'
 import { MainArea } from '@/ui/MainArea'
 import { SidePane } from '@/ui/SidePane'
-
-declare global {
-  interface Window {
-    __llmcoder: {
-      phase: string
-      model?: string
-      progress?: number
-      error?: string
-      generating?: boolean
-    }
-  }
-}
 
 function MoteApp() {
   const { state, dispatch } = useAppState()
@@ -36,25 +25,21 @@ function MoteApp() {
     try {
       await loadModel(selected, (report) => {
         dispatch({ type: 'modelProgress', report })
-        window.__llmcoder = {
-          phase: 'loading',
-          model: selected.id,
-          progress: report.progress,
-        }
+        setAutomationStatus({ phase: 'loading', model: selected.id, progress: report.progress })
       })
       dispatch({ type: 'modelReady', id: selected.id })
-      window.__llmcoder = { phase: 'ready', model: selected.id, progress: 1 }
+      setAutomationStatus({ phase: 'ready', model: selected.id, progress: 1 })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       dispatch({ type: 'modelError', message })
-      window.__llmcoder = { phase: 'error', model: selected.id, error: message }
+      setAutomationStatus({ phase: 'error', model: selected.id, error: message })
     }
   }, [dispatch, state.model.selectedId, state.models])
 
   useEffect(() => {
     if (initialized.current) return
     initialized.current = true
-    window.__llmcoder = { phase: 'initializing' }
+    setAutomationStatus({ phase: 'initializing' })
 
     void prepareEngine()
       .then(async ({ models }) => {
@@ -74,12 +59,12 @@ function MoteApp() {
           selectedId: requestedModel.id,
         })
         dispatch({ type: 'cacheStatus', ids: await getCachedModelIds(models) })
-        window.__llmcoder = { phase: 'idle', model: requestedModel.id }
+        setAutomationStatus({ phase: 'idle', model: requestedModel.id })
       })
       .catch((error) => {
         const message = error instanceof Error ? error.message : String(error)
         dispatch({ type: 'modelError', message })
-        window.__llmcoder = { phase: 'error', error: message }
+        setAutomationStatus({ phase: 'error', error: message })
       })
   }, [dispatch])
 
@@ -96,10 +81,7 @@ function MoteApp() {
   }, [loadSelectedModel, state.models.length])
 
   useEffect(() => {
-    window.__llmcoder = {
-      ...window.__llmcoder,
-      generating: state.generating,
-    }
+    setAutomationGenerating(state.generating)
   }, [state.generating])
 
   async function deleteSelectedModel() {
@@ -110,7 +92,7 @@ function MoteApp() {
     try {
       await deleteCachedModel(selected.id)
       dispatch({ type: 'modelDeleted', id: selected.id })
-      window.__llmcoder = { phase: 'idle', model: selected.id }
+      setAutomationStatus({ phase: 'idle', model: selected.id })
     } catch (error) {
       dispatch({
         type: 'modelError',

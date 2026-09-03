@@ -27,3 +27,4 @@ dist-ssr
 models/
 .cdp-profile/
 cdp-trace*.json
+cdp-report*.json

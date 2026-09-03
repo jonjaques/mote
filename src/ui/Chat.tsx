@@ -2,9 +2,10 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import { ArrowRight, ArrowUp, LoaderCircle, Square } from 'lucide-react'
 import type { ChatCompletionMessageParam } from '@mlc-ai/web-llm'
 
+import { registerAutomationHooks, type AutomationRun } from '@/automation'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { runAgent } from '@/llm/agent'
+import { runAgent, type AgentToolActivity } from '@/llm/agent'
 import { interruptGeneration } from '@/llm/engine'
 import { useAppState, type ChatMessage } from '@/state'
 import { ToolCallCard } from './ToolCallCard'
@@ -17,6 +18,10 @@ export function Chat() {
   const { state, dispatch } = useAppState()
   const [input, setInput] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
+  const stateRef = useRef(state)
+  useEffect(() => {
+    stateRef.current = state
+  })
   const canSend =
     input.trim().length > 0 &&
     state.model.phase === 'ready' &&
@@ -29,8 +34,10 @@ export function Chat() {
     })
   }, [state.messages, state.generating])
 
-  async function runInput(content: string) {
-    if (!content || state.model.phase !== 'ready' || state.generating) return
+  async function runInput(content: string): Promise<AutomationRun> {
+    if (!content) throw new Error('Nothing to send.')
+    if (state.model.phase !== 'ready') throw new Error('No model is loaded.')
+    if (state.generating) throw new Error('A response is already generating.')
 
     const userMessage: ChatMessage = { id: makeId('user'), role: 'user', content }
     const assistantId = makeId('assistant')
@@ -40,9 +47,12 @@ export function Chat() {
       content: '',
       pending: true,
     }
-    const history: ChatCompletionMessageParam[] = [...state.messages, userMessage].map(
-      (message) => ({ role: message.role, content: message.content }),
-    )
+    const history: ChatCompletionMessageParam[] = state.messages.map((message) => ({
+      role: message.role,
+      content: message.content,
+    }))
+    const tools = new Map<string, AgentToolActivity>()
+    const startedAt = performance.now()
 
     setInput('')
     dispatch({ type: 'appendMessage', message: userMessage })
@@ -50,11 +60,12 @@ export function Chat() {
     dispatch({ type: 'setGenerating', value: true })
 
     try {
-      const result = await runAgent(content, history.slice(0, -1), {
+      const result = await runAgent(content, history, {
         onText: (reply) => {
           dispatch({ type: 'streamMessage', id: assistantId, content: reply })
         },
         onTool: (activity) => {
+          tools.set(activity.id, activity)
           const content = activity.call.arguments.content
           dispatch({
             type: 'toolActivity',
@@ -82,6 +93,11 @@ export function Chat() {
         })
       }
       dispatch({ type: 'finishMessage', id: assistantId, cutOff: result.cutOff })
+      return {
+        ...result,
+        seconds: (performance.now() - startedAt) / 1_000,
+        tools: [...tools.values()],
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       dispatch({
@@ -90,10 +106,34 @@ export function Chat() {
         content: `Generation failed: ${message}`,
       })
       dispatch({ type: 'finishMessage', id: assistantId })
+      return {
+        content: '',
+        cutOff: false,
+        rounds: 0,
+        seconds: (performance.now() - startedAt) / 1_000,
+        tools: [...tools.values()],
+        error: message,
+      }
     } finally {
       dispatch({ type: 'setGenerating', value: false })
     }
   }
+
+  // runInput closes over the latest state, so automation reaches it through a ref that the
+  // effect below refreshes after every render instead of re-registering hooks each time.
+  const runInputRef = useRef(runInput)
+  useEffect(() => {
+    runInputRef.current = runInput
+  })
+  useEffect(
+    () =>
+      registerAutomationHooks({
+        send: (text) => runInputRef.current(text.trim()),
+        getMessages: () => stateRef.current.messages,
+        clearChat: () => dispatch({ type: 'resetChat' }),
+      }),
+    [dispatch],
+  )
 
   async function sendMessage(event?: FormEvent) {
     event?.preventDefault()
