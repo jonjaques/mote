@@ -60,7 +60,7 @@ describe('runAgent', () => {
     create.mockImplementationOnce(async () => reply('Hello there.'))
     const result = await runAgent('hi', [{ role: 'user', content: 'earlier' }], callbacks)
 
-    expect(result).toEqual({ content: 'Hello there.', cutOff: false, rounds: 1 })
+    expect(result).toMatchObject({ content: 'Hello there.', cutOff: false, rounds: 1 })
     const request = create.mock.calls[0][0]
     expect(request.messages[0]).toMatchObject({ role: 'system' })
     expect(request.messages[0].content).toContain('You are Mote')
@@ -88,7 +88,7 @@ describe('runAgent', () => {
       .mockImplementationOnce(async () => reply('There are three files.'))
     const result = await runAgent('what files exist?', [], callbacks)
 
-    expect(result).toEqual({ content: 'There are three files.', cutOff: false, rounds: 2 })
+    expect(result).toMatchObject({ content: 'There are three files.', cutOff: false, rounds: 2 })
     expect(callbacks.onTool).toHaveBeenCalledTimes(2)
     // Only the opening round is forced to call a tool; the answer round may be prose.
     expect(create.mock.calls[0][0].response_format.structural_tag.format.at_least_one).toBe(true)
@@ -116,7 +116,7 @@ describe('runAgent', () => {
     const result = await runAgent('make it blue', [], callbacks)
 
     expect(create).toHaveBeenCalledTimes(1)
-    expect(result).toEqual({ content: 'Updated index.html and reloaded the preview.', cutOff: false, rounds: 1 })
+    expect(result).toMatchObject({ content: 'Updated index.html and reloaded the preview.', cutOff: false, rounds: 1 })
     expect(projectFS.read('index.html')).toBe('<p>blue</p>')
     expect(callbacks.onText).toHaveBeenLastCalledWith('Updated index.html and reloaded the preview.')
   })
@@ -131,14 +131,55 @@ describe('runAgent', () => {
     const result = await runAgent('build a page', [], callbacks)
 
     expect(create).toHaveBeenCalledTimes(2)
-    expect(result).toEqual({ content: 'Updated styles.css and reloaded the preview.', cutOff: false, rounds: 2 })
+    expect(result).toMatchObject({ content: 'Updated styles.css and reloaded the preview.', cutOff: false, rounds: 2 })
     expect(projectFS.read('styles.css')).toBe('body{margin:0}')
+  })
+
+  it('runs a call as soon as its block closes, before the stream ends', async () => {
+    const seen: string[] = []
+    const write = toolCall('write_file', { path: 'index.html', content: '<p>eager</p>' })
+    create.mockImplementationOnce(async () =>
+      (async function* () {
+        yield { choices: [{ delta: { content: `${write}\n` }, finish_reason: null }] }
+        // Let the queued tool run before the next chunk to observe the ordering.
+        await new Promise((resolve) => setTimeout(resolve, 5))
+        seen.push(projectFS.read('index.html'))
+        yield { choices: [{ delta: { content: 'trailing prose' }, finish_reason: 'stop' }] }
+      })(),
+    )
+    const result = await runAgent('build', [], callbacks)
+    expect(seen).toEqual(['<p>eager</p>'])
+    expect(result).toMatchObject({ content: 'Updated index.html and reloaded the preview.', rounds: 1 })
+  })
+
+  it('keeps an eager write when the stream is stopped, but starts no new round', async () => {
+    const write = toolCall('write_file', { path: 'index.html', content: '<p>kept</p>' })
+    create.mockImplementationOnce(async () =>
+      (async function* () {
+        yield { choices: [{ delta: { content: write }, finish_reason: null }] }
+        yield { choices: [{ delta: { content: '' }, finish_reason: 'abort' }] }
+      })(),
+    )
+    const result = await runAgent('build', [], callbacks)
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(result).toMatchObject({ stopped: true, content: 'Stopped.' })
+    expect(projectFS.read('index.html')).toBe('<p>kept</p>')
+    expect(callbacks.onTool).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'complete' }))
+  })
+
+  it('accepts a whole call whose closing tag never arrived', async () => {
+    create
+      .mockImplementationOnce(async () => reply('<tool_call>\n{"name":"list_files","arguments":{}}'))
+      .mockImplementationOnce(async () => reply('Three files.'))
+    const result = await runAgent('what is here?', [], callbacks)
+    expect(result.content).toBe('Three files.')
+    expect(callbacks.onTool).toHaveBeenCalledTimes(2)
   })
 
   it('surfaces a truncated response instead of looping', async () => {
     create.mockImplementationOnce(async () => reply('Half a page', 'length'))
     const result = await runAgent('build', [], callbacks)
-    expect(result).toEqual({ content: 'Half a page', cutOff: true, rounds: 1 })
+    expect(result).toMatchObject({ content: 'Half a page', cutOff: true, rounds: 1 })
     expect(create).toHaveBeenCalledTimes(1)
   })
 
@@ -175,7 +216,7 @@ describe('runAgent', () => {
       'read_file',
       'write_file',
     ])
-    expect(result).toEqual({ content: 'Updated index.html and reloaded the preview.', cutOff: false, rounds: 4 })
+    expect(result).toMatchObject({ content: 'Updated index.html and reloaded the preview.', cutOff: false, rounds: 4 })
   })
 
   it('asks for a corrected call when the tool payload is malformed', async () => {

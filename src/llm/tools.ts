@@ -249,29 +249,99 @@ export function structuralTagFor({ requireCall }: { requireCall: boolean }): Str
 
 export const structuralTag: StructuralTag = structuralTagFor({ requireCall: false })
 
+export interface ToolBlock {
+  // Character offsets in the scanned content: where the opener starts and where the block ends.
+  start: number
+  end: number
+  json: string
+  wrapper: 'tag' | 'fence'
+  // False while the closing tag or fence has not arrived; the JSON itself is already complete.
+  closed: boolean
+}
+
+// End offset (exclusive) of the JSON object starting at `start`, or -1 while it is incomplete.
+// Walks strings and escapes so a brace or a fence inside file content cannot end it early.
+function balancedObjectEnd(text: string, start: number): number {
+  let depth = 0
+  let inString = false
+  for (let i = start; i < text.length; i += 1) {
+    const char = text[i]
+    if (inString) {
+      if (char === '\\') i += 1
+      else if (char === '"') inString = false
+      continue
+    }
+    if (char === '"') inString = true
+    else if (char === '{') depth += 1
+    else if (char === '}') {
+      depth -= 1
+      if (depth === 0) return i + 1
+    }
+  }
+  return -1
+}
+
+// Every tool block in `content` from offset `from`, in order, including one still streaming
+// (closed: false). The agent scans the growing stream with this so a call can run as soon as
+// its JSON is whole, and parseToolCalls uses it at the end of a turn.
+export function scanToolBlocks(content: string, from = 0): ToolBlock[] {
+  const blocks: ToolBlock[] = []
+  const opener = /<tool_call>|```(?:json)?[ \t]*\r?\n?/g
+  opener.lastIndex = from
+  let match: RegExpExecArray | null
+  while ((match = opener.exec(content)) !== null) {
+    const wrapper: ToolBlock['wrapper'] = match[0].startsWith('<') ? 'tag' : 'fence'
+    const brace = content.indexOf('{', match.index + match[0].length)
+    if (brace === -1) break
+    // Only whitespace may sit between the opener and the object; anything else is prose.
+    if (content.slice(match.index + match[0].length, brace).trim() !== '') continue
+    const objectEnd = balancedObjectEnd(content, brace)
+    if (objectEnd === -1) {
+      blocks.push({ start: match.index, end: content.length, json: content.slice(brace), wrapper, closed: false })
+      break
+    }
+    const closer = wrapper === 'tag' ? /^\s*<\/tool_call>/ : /^\s*```/
+    const rest = content.slice(objectEnd)
+    const closed = closer.exec(rest)
+    const end = closed ? objectEnd + closed[0].length : objectEnd
+    blocks.push({ start: match.index, end, json: content.slice(brace, objectEnd), wrapper, closed: Boolean(closed) })
+    opener.lastIndex = end
+  }
+  return blocks
+}
+
+// Parse a finished block. Registered fenced calls are accepted; any other fence is prose (a
+// config sample, a snippet) and must not become a side effect or a "broken tool call"
+// complaint. A <tool_call> that is not a call object is an error the model should hear about.
+export function parseToolBlock(block: ToolBlock): ToolCall | undefined {
+  if (block.wrapper === 'tag') return parseToolCallObject(block.json)
+  try {
+    const call = parseToolCallObject(block.json)
+    return toolMap.has(call.name) ? call : undefined
+  } catch {
+    return undefined
+  }
+}
+
 export function parseToolCalls(content: string): ToolCall[] {
   const calls: ToolCall[] = []
-  const pattern = /<tool_call>\s*(\{[\s\S]*?\})\s*<\/tool_call>/g
-
-  for (const match of content.matchAll(pattern)) {
-    calls.push(parseToolCallObject(match[1]))
+  for (const block of scanToolBlocks(content)) {
+    // An unterminated block whose object is whole still counts: the model may hit its stop
+    // token right after the closing brace, and the call is not less real for that.
+    const hasWholeObject = balancedObjectEnd(block.json, 0) === block.json.length
+    if (!block.closed && !hasWholeObject) continue
+    const call = parseToolBlock(block)
+    if (call) calls.push(call)
   }
-
   if (calls.length > 0) return calls
 
-  // Fenced calls: valid JSON when the grammar produced them, arbitrary text when the model
-  // wrote a fence the grammar did not cover. Accept only registered call objects and treat
-  // anything else as prose, so a config sample or snippet never becomes a side effect or a
-  // "broken tool call" complaint sent back to the model.
-  const fenced = [...content.matchAll(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/gi)].map((m) => m[1])
   const trimmed = content.trim()
-  const raw = trimmed.startsWith('{') && trimmed.endsWith('}') ? [trimmed] : []
-  for (const candidate of fenced.length ? fenced : raw) {
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
     try {
-      const call = parseToolCallObject(candidate)
+      const call = parseToolCallObject(trimmed)
       if (toolMap.has(call.name)) calls.push(call)
     } catch {
-      // Not a call object.
+      // Bare JSON that is not a call object is prose.
     }
   }
   return calls
@@ -294,7 +364,9 @@ export function visibleAssistantText(content: string): string {
     .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
     .replace(/<tool_call>[\s\S]*$/g, '')
     .replace(/```(?:json)?\s*\{[\s\S]*?"name"\s*:[\s\S]*?```/gi, '')
-    .replace(/```(?:json)?\s*\{[\s\S]*?"name"\s*:[\s\S]*$/i, '')
+    // While streaming, an open fence is a tool call in progress the moment it starts an object.
+    .replace(/```(?:json)?\s*\{[\s\S]*$/i, '')
+    .replace(/```(?:json)?\s*$/i, '')
     .trim()
 }
 

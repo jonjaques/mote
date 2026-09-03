@@ -3,10 +3,12 @@ import type { ChatCompletionMessageParam } from '@mlc-ai/web-llm'
 import { prepareEngine } from './engine'
 import { isPageBuilderModel } from './models'
 import { pageBuilderPrompt } from './prompts'
+import { liveStream } from './stream'
 import {
   createTurnContext,
-  parseToolCalls,
+  parseToolBlock,
   runTool,
+  scanToolBlocks,
   structuralTagFor,
   visibleAssistantText,
   type ToolCall,
@@ -27,15 +29,54 @@ export interface AgentToolActivity {
   result?: ToolResult
 }
 
+// Where the current generation is, for the chat to show something better than "Thinking…"
+// while a 7B model spends two minutes streaming a tool call the user cannot see yet.
+export interface AgentProgress {
+  phase: 'prefill' | 'text' | 'tool'
+  tool?: string
+  path?: string
+  chars: number
+  round: number
+  startedAt: number
+}
+
+export interface AgentStats {
+  seconds: number
+  rounds: number
+  completionTokens: number
+  promptTokens: number
+  tokensPerSecond?: number
+}
+
 export interface AgentCallbacks {
   onText(content: string): void
   onTool(activity: AgentToolActivity): void
+  onProgress?(progress: AgentProgress): void
 }
 
 export interface AgentResult {
   content: string
   cutOff: boolean
+  stopped: boolean
   rounds: number
+  stats: AgentStats
+}
+
+// The last open tag decides what the model is doing right now: a name and, for file tools,
+// the path arrive within the first few dozen characters, long before the payload ends.
+export function describeStreaming(rawContent: string): Pick<AgentProgress, 'phase' | 'tool' | 'path' | 'chars'> {
+  const openers = [...rawContent.matchAll(/<tool_call>|```(?:json)?\s*\{/g)]
+  const last = openers.at(-1)
+  if (!last || last.index === undefined) {
+    return { phase: rawContent.length ? 'text' : 'prefill', chars: rawContent.length }
+  }
+  const tail = rawContent.slice(last.index)
+  if (/<\/tool_call>\s*$|```\s*$/.test(tail) && tail.length > 12) {
+    return { phase: 'text', chars: rawContent.length }
+  }
+  const tool = tail.match(/"name"\s*:\s*"([^"]*)"/)?.[1]
+  const path = tail.match(/"path"\s*:\s*"([^"]*)"/)?.[1]
+  return { phase: 'tool', tool, path, chars: tail.length }
 }
 
 function activityId(round: number, index: number): string {
@@ -68,11 +109,22 @@ export async function runAgent(
   let finalVisibleText = ''
   const answeredSinceWrite = new Set<string>()
   let repeatedRounds = 0
+  const startedAt = Date.now()
+  const stats: AgentStats = { seconds: 0, rounds: 0, completionTokens: 0, promptTokens: 0 }
+  const finish = (content: string, flags: { cutOff?: boolean; stopped?: boolean }, round: number): AgentResult => {
+    stats.rounds = round + 1
+    stats.seconds = (Date.now() - startedAt) / 1_000
+    liveStream.clear()
+    return { content, cutOff: flags.cutOff ?? false, stopped: flags.stopped ?? false, rounds: round + 1, stats }
+  }
 
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
+    liveStream.set('')
+    callbacks.onProgress?.({ phase: 'prefill', chars: 0, round, startedAt })
     const stream = await engine.chat.completions.create({
       messages,
       stream: true,
+      stream_options: { include_usage: true },
       response_format: {
         type: 'structural_tag',
         structural_tag: structuralTagFor({ requireCall: round === 0 }),
@@ -84,59 +136,116 @@ export async function runAgent(
 
     let rawContent = ''
     let finishReason: string | null = null
+    let lastProgressKey = ''
+
+    // Calls run as soon as their block is whole, while the model is still streaming the rest
+    // of its turn. A 7B page arrives as three write_file blocks over two minutes; running each
+    // on arrival puts the page in the preview a file at a time instead of all at the end.
+    interface RoundEntry {
+      call?: ToolCall
+      parseError?: string
+      repeat: boolean
+      result?: Promise<ToolResult>
+    }
+    const entries: RoundEntry[] = []
+    let scanFrom = 0
+    let queue: Promise<unknown> = Promise.resolve()
+    const execute = (call: ToolCall, index: number): Promise<ToolResult> => {
+      const id = activityId(round, index)
+      callbacks.onTool({ id, call, status: 'running' })
+      const run = queue.then(async () => {
+        const result = await runTool(call, turn)
+        callbacks.onTool({ id, call, status: result.ok ? 'complete' : 'error', result })
+        return result
+      })
+      queue = run.catch(() => undefined)
+      return run
+    }
+    const absorbBlocks = (final: boolean) => {
+      for (const block of scanToolBlocks(rawContent, scanFrom)) {
+        if (!block.closed) {
+          // Whole object, missing closer: only at the end of the stream does that count.
+          const whole = final && block.json.trimEnd().endsWith('}')
+          if (!whole) break
+        }
+        scanFrom = block.end
+        let call: ToolCall | undefined
+        try {
+          call = parseToolBlock(block)
+        } catch (error) {
+          entries.push({ parseError: error instanceof Error ? error.message : String(error), repeat: false })
+          continue
+        }
+        if (!call) continue
+        const signature = JSON.stringify(call)
+        if (answeredSinceWrite.has(signature)) {
+          entries.push({ call, repeat: true })
+          continue
+        }
+        if (call.name === 'write_file') answeredSinceWrite.clear()
+        else answeredSinceWrite.add(signature)
+        entries.push({ call, repeat: false, result: execute(call, entries.length) })
+      }
+    }
+
     for await (const chunk of stream) {
+      if (chunk.usage) {
+        stats.completionTokens += chunk.usage.completion_tokens
+        stats.promptTokens += chunk.usage.prompt_tokens
+        stats.tokensPerSecond = chunk.usage.extra?.decode_tokens_per_s ?? stats.tokensPerSecond
+      }
       rawContent += chunk.choices[0]?.delta.content ?? ''
       finishReason = chunk.choices[0]?.finish_reason ?? finishReason
+      liveStream.set(rawContent)
       const visible = visibleAssistantText(rawContent)
       if (visible) {
         finalVisibleText = visible
         callbacks.onText(visible)
       }
+      if (callbacks.onProgress) {
+        const described = describeStreaming(rawContent)
+        // One dispatch per phase change or per ~256 characters keeps the chat from
+        // re-rendering on every token without hiding a stalled stream.
+        const key = `${described.phase}:${described.tool ?? ''}:${described.path ?? ''}:${described.chars >> 8}`
+        if (key !== lastProgressKey) {
+          lastProgressKey = key
+          callbacks.onProgress({ ...described, round, startedAt })
+        }
+      }
+      absorbBlocks(false)
+    }
+
+    // Stop keeps whatever already ran (those cards are on screen) but starts nothing more.
+    if (finishReason === 'abort') {
+      await queue
+      return finish(finalVisibleText || 'Stopped.', { stopped: true }, round)
     }
 
     if (finishReason === 'length') {
-      return {
-        content: finalVisibleText || 'The model output was cut off before it could finish.',
-        cutOff: true,
-        rounds: round + 1,
-      }
+      await queue
+      return finish(
+        finalVisibleText || 'The model output was cut off before it could finish.',
+        { cutOff: true },
+        round,
+      )
     }
 
-    let calls: ToolCall[]
-    try {
-      calls = parseToolCalls(rawContent)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      messages.push({ role: 'assistant', content: rawContent })
-      messages.push({
-        role: 'user',
-        content: `<tool_response>${JSON.stringify({
-          ok: false,
-          summary: `The tool call could not be parsed: ${message}. Emit a corrected tool call.`,
-        })}</tool_response>`,
-      })
-      continue
-    }
+    absorbBlocks(true)
 
-    if (calls.length === 0) {
-      return {
-        content: finalVisibleText || visibleAssistantText(rawContent),
-        cutOff: false,
-        rounds: round + 1,
-      }
+    if (entries.length === 0) {
+      return finish(finalVisibleText || visibleAssistantText(rawContent), {}, round)
     }
 
     messages.push({ role: 'assistant', content: rawContent })
 
-    const signatures = calls.map((call) => JSON.stringify(call))
-    if (signatures.every((signature) => answeredSinceWrite.has(signature))) {
+    if (entries.every((entry) => entry.repeat)) {
       repeatedRounds += 1
       if (repeatedRounds >= MAX_REPEATED_ROUNDS) {
         const content =
           finalVisibleText ||
           'Stopped: the model kept repeating tool calls without changing the project.'
         callbacks.onText(content)
-        return { content, cutOff: false, rounds: round + 1 }
+        return finish(content, {}, round)
       }
       messages.push({
         role: 'user',
@@ -148,22 +257,34 @@ export async function runAgent(
       })
       continue
     }
-    for (const signature of signatures) answeredSinceWrite.add(signature)
-    if (calls.some((call) => call.name === 'write_file')) answeredSinceWrite.clear()
 
     const completed: Array<{ call: ToolCall; result: ToolResult }> = []
-    for (const [index, call] of calls.entries()) {
-      const id = activityId(round, index)
-      callbacks.onTool({ id, call, status: 'running' })
-      const result = await runTool(call, turn)
-      callbacks.onTool({
-        id,
-        call,
-        status: result.ok ? 'complete' : 'error',
-        result,
-      })
-      completed.push({ call, result })
-      messages.push({ role: 'user', content: toolResponse(call, result) })
+    for (const entry of entries) {
+      if (entry.parseError !== undefined) {
+        messages.push({
+          role: 'user',
+          content: `<tool_response>${JSON.stringify({
+            ok: false,
+            summary: `The tool call could not be parsed: ${entry.parseError}. Emit a corrected tool call.`,
+          })}</tool_response>`,
+        })
+        continue
+      }
+      if (!entry.call) continue
+      if (entry.repeat || !entry.result) {
+        messages.push({
+          role: 'user',
+          content: `<tool_response>${JSON.stringify({
+            name: entry.call.name,
+            ok: false,
+            summary: 'Already answered this turn and nothing has changed since; the result would be identical.',
+          })}</tool_response>`,
+        })
+        continue
+      }
+      const result = await entry.result
+      completed.push({ call: entry.call, result })
+      messages.push({ role: 'user', content: toolResponse(entry.call, result) })
     }
 
     const writtenPaths = completed
@@ -181,16 +302,17 @@ export async function runAgent(
     if (
       writtenPaths.length > 0 &&
       completed.every(({ result }) => result.ok) &&
+      entries.every((entry) => entry.parseError === undefined) &&
       !smartPageNeedsStyles
     ) {
       const uniquePaths = [...new Set(writtenPaths)]
       const summary = `Updated ${uniquePaths.join(', ')} and reloaded the preview.`
       callbacks.onText(summary)
-      return { content: summary, cutOff: false, rounds: round + 1 }
+      return finish(summary, {}, round)
     }
   }
 
   const content = finalVisibleText || 'I reached the eight-round safety limit before finishing.'
   callbacks.onText(content)
-  return { content, cutOff: false, rounds: MAX_ROUNDS }
+  return finish(content, {}, MAX_ROUNDS - 1)
 }

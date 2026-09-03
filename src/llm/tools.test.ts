@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { createTurnContext, parseToolCalls, runTool, structuralTag, visibleAssistantText } from './tools'
+import { createTurnContext, parseToolCalls, runTool, scanToolBlocks, structuralTag, visibleAssistantText } from './tools'
 
 const call = (name: string, args: Record<string, unknown>) =>
   `<tool_call>\n${JSON.stringify({ name, arguments: args })}\n</tool_call>`
@@ -41,6 +41,19 @@ describe('parseToolCalls', () => {
     expect(parseToolCalls('```json\n{ not json }\n```')).toEqual([])
   })
 
+  it('scans a streaming fence whose file content contains braces and fences', () => {
+    const content = '```json\n{"name":"write_file","arguments":{"path":"index.html","content":"<pre>```js\\nif (a) { b() }\\n```</pre>"}}\n```\nDone.'
+    const [block] = scanToolBlocks(content)
+    expect(block).toMatchObject({ wrapper: 'fence', closed: true })
+    expect(JSON.parse(block.json).arguments.content).toContain('if (a) { b() }')
+    expect(content.slice(block.end)).toBe('\nDone.')
+    // The same block mid-stream, cut inside the string, is not closed and not whole.
+    const partial = scanToolBlocks(content.slice(0, 60))
+    expect(partial).toHaveLength(1)
+    expect(partial[0].closed).toBe(false)
+    expect(parseToolCalls(content.slice(0, 60))).toEqual([])
+  })
+
   it('rejects a structural-tag call without a name', () => {
     expect(() => parseToolCalls('<tool_call>{"arguments":{}}</tool_call>')).toThrow(/name/)
   })
@@ -54,6 +67,8 @@ describe('visibleAssistantText', () => {
 
   it('hides an unterminated fenced call while it streams', () => {
     expect(visibleAssistantText('Sure.\n```json\n{"name":"write_file","arguments":{"path"')).toBe('Sure.')
+    expect(visibleAssistantText('Sure.\n```json\n{"name')).toBe('Sure.')
+    expect(visibleAssistantText('Sure.\n```json\n')).toBe('Sure.')
   })
 
   it('hides an unterminated tool call while it streams', () => {
