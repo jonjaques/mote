@@ -1,0 +1,428 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-02T00:00:00.000Z",
+  "title": "Design System: Mote",
+  "extensions": {
+    "colorMeta": {
+      "signal-cyan": {
+        "role": "primary",
+        "displayName": "Signal Cyan",
+        "canonical": "oklch(0.82 0.16 183)",
+        "tonalRamp": [
+          "oklch(0.15 0.06 183)",
+          "oklch(0.26 0.10 183)",
+          "oklch(0.37 0.13 183)",
+          "oklch(0.48 0.15 183)",
+          "oklch(0.59 0.16 183)",
+          "oklch(0.70 0.16 183)",
+          "oklch(0.82 0.16 183)",
+          "oklch(0.93 0.08 183)"
+        ]
+      },
+      "trace-cyan": {
+        "role": "primary",
+        "displayName": "Trace Cyan",
+        "canonical": "oklch(0.55 0.09 183)",
+        "tonalRamp": [
+          "oklch(0.15 0.04 183)",
+          "oklch(0.26 0.06 183)",
+          "oklch(0.37 0.08 183)",
+          "oklch(0.48 0.09 183)",
+          "oklch(0.55 0.09 183)",
+          "oklch(0.70 0.09 183)",
+          "oklch(0.82 0.09 183)",
+          "oklch(0.93 0.05 183)"
+        ]
+      },
+      "accent-surface": {
+        "role": "secondary",
+        "displayName": "Accent Surface",
+        "canonical": "oklch(0.23 0.03 190)",
+        "tonalRamp": [
+          "oklch(0.15 0.02 190)",
+          "oklch(0.23 0.03 190)",
+          "oklch(0.34 0.03 190)",
+          "oklch(0.45 0.04 190)",
+          "oklch(0.56 0.04 190)",
+          "oklch(0.70 0.04 190)",
+          "oklch(0.82 0.04 190)",
+          "oklch(0.92 0.04 190)"
+        ]
+      },
+      "log-red": {
+        "role": "tertiary",
+        "displayName": "Log Red",
+        "canonical": "oklch(0.73 0.16 28)",
+        "tonalRamp": [
+          "oklch(0.15 0.06 28)",
+          "oklch(0.26 0.10 28)",
+          "oklch(0.37 0.13 28)",
+          "oklch(0.48 0.15 28)",
+          "oklch(0.59 0.16 28)",
+          "oklch(0.73 0.16 28)",
+          "oklch(0.83 0.12 28)",
+          "oklch(0.93 0.06 28)"
+        ]
+      },
+      "log-amber": {
+        "role": "tertiary",
+        "displayName": "Log Amber",
+        "canonical": "oklch(0.78 0.13 80)",
+        "tonalRamp": [
+          "oklch(0.15 0.05 80)",
+          "oklch(0.26 0.08 80)",
+          "oklch(0.37 0.10 80)",
+          "oklch(0.48 0.12 80)",
+          "oklch(0.59 0.13 80)",
+          "oklch(0.70 0.13 80)",
+          "oklch(0.78 0.13 80)",
+          "oklch(0.93 0.06 80)"
+        ]
+      },
+      "alert-red": {
+        "role": "tertiary",
+        "displayName": "Alert Red",
+        "canonical": "oklch(0.68 0.2 25)",
+        "tonalRamp": [
+          "oklch(0.15 0.07 25)",
+          "oklch(0.26 0.12 25)",
+          "oklch(0.37 0.16 25)",
+          "oklch(0.48 0.19 25)",
+          "oklch(0.59 0.20 25)",
+          "oklch(0.68 0.20 25)",
+          "oklch(0.82 0.13 25)",
+          "oklch(0.93 0.06 25)"
+        ]
+      },
+      "cold-graphite": {
+        "role": "neutral",
+        "displayName": "Cold Graphite",
+        "canonical": "oklch(0.13 0.008 255)",
+        "tonalRamp": [
+          "oklch(0.11 0.008 255)",
+          "oklch(0.13 0.008 255)",
+          "oklch(0.155 0.009 255)",
+          "oklch(0.19 0.012 255)",
+          "oklch(0.29 0.014 250)",
+          "oklch(0.50 0.014 245)",
+          "oklch(0.72 0.014 240)",
+          "oklch(0.94 0.012 235)"
+        ]
+      },
+      "well": {
+        "role": "neutral",
+        "displayName": "Well",
+        "canonical": "oklch(0.11 0.008 255)",
+        "tonalRamp": [
+          "oklch(0.11 0.008 255)",
+          "oklch(0.115 0.007 255)",
+          "oklch(0.13 0.008 255)",
+          "oklch(0.155 0.009 255)",
+          "oklch(0.16 0.01 255)",
+          "oklch(0.18 0.011 255)",
+          "oklch(0.19 0.012 255)",
+          "oklch(0.22 0.014 255)"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Border",
+        "canonical": "oklch(0.29 0.014 250)",
+        "tonalRamp": [
+          "oklch(0.15 0.010 250)",
+          "oklch(0.22 0.012 250)",
+          "oklch(0.27 0.014 250)",
+          "oklch(0.29 0.014 250)",
+          "oklch(0.42 0.014 250)",
+          "oklch(0.55 0.014 245)",
+          "oklch(0.75 0.014 240)",
+          "oklch(0.93 0.012 235)"
+        ]
+      },
+      "instrument-white": {
+        "role": "neutral",
+        "displayName": "Instrument White",
+        "canonical": "oklch(0.94 0.012 235)",
+        "tonalRamp": [
+          "oklch(0.15 0.010 235)",
+          "oklch(0.26 0.012 235)",
+          "oklch(0.37 0.012 235)",
+          "oklch(0.48 0.014 238)",
+          "oklch(0.65 0.015 240)",
+          "oklch(0.80 0.013 237)",
+          "oklch(0.91 0.012 235)",
+          "oklch(0.94 0.012 235)"
+        ]
+      },
+      "code-text": {
+        "role": "neutral",
+        "displayName": "Code Text",
+        "canonical": "oklch(0.80 0.03 220)",
+        "tonalRamp": [
+          "oklch(0.15 0.015 220)",
+          "oklch(0.26 0.02 220)",
+          "oklch(0.37 0.025 220)",
+          "oklch(0.48 0.03 220)",
+          "oklch(0.62 0.03 220)",
+          "oklch(0.72 0.03 220)",
+          "oklch(0.80 0.03 220)",
+          "oklch(0.93 0.02 220)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "The product name in the brand block. The only h1 in the application; the largest type anywhere in the chrome."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Section headings inside panes — Runtime, Session. Sits within the chrome rather than above it."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Message text and empty-state copy. pre-wrap so the model's line breaks survive."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "The workhorse: status bar, version, role tags, tree and console headers. Uppercased where it labels a region."
+      },
+      "micro": {
+        "displayName": "Micro",
+        "purpose": "Progress percentages, tool-card metadata, run statistics. Almost always a number, always tabular."
+      },
+      "nano": {
+        "displayName": "Nano",
+        "purpose": "The type floor: count badges, menu group labels, file-size readouts. Never set below weight 650."
+      },
+      "code": {
+        "displayName": "Code",
+        "purpose": "Editor content, console output, tool code, raw model stream. Size tracks how much of it you are expected to read."
+      }
+    },
+    "shadows": [
+      {
+        "name": "signal-glow",
+        "value": "0 0 1rem color-mix(in oklch, var(--primary), transparent 45%)",
+        "purpose": "Cyan halo on the mote mark and the brand symbol core. Means the runtime is live — never atmosphere."
+      },
+      {
+        "name": "status-halo",
+        "value": "0 0.2rem 0.6rem color-mix(in oklch, var(--primary), transparent 55%)",
+        "purpose": "Readout-scale glow under a ready status dot. Takes the dot's own color, so an idle dot glows grey."
+      },
+      {
+        "name": "inset-selected",
+        "value": "inset 1px 0 var(--primary)",
+        "purpose": "1px cyan left edge marking the selected file. A border drawn where a real border would shift layout."
+      },
+      {
+        "name": "inset-active",
+        "value": "inset 0 -1px var(--primary)",
+        "purpose": "1px cyan bottom edge marking the active segment in the preview-width control."
+      },
+      {
+        "name": "focus-ring",
+        "value": "0 0 0 3px color-mix(in oklch, var(--ring), transparent 50%)",
+        "purpose": "focus-visible ring on every interactive control, paired with a solid border shift."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-transition",
+        "value": "transition: color 0.2s, box-shadow 0.2s, background 0.2s",
+        "purpose": "Default for hover and focus. Color and shadow only — geometry never transitions."
+      },
+      {
+        "name": "press",
+        "value": "transform: translateY(1px)",
+        "purpose": "Active state on buttons, applied instantly with no transition. Excluded on menu triggers."
+      },
+      {
+        "name": "spin",
+        "value": "animation: spin 1.2s linear infinite",
+        "purpose": "The only keyframe animation in the host application: loading and generating indicators."
+      },
+      {
+        "name": "progress-fill",
+        "value": "width, set inline per progress report",
+        "purpose": "The load bar's inner span. Written directly, not animated — layout properties must not be transitioned here."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "stacked",
+        "value": "760px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The only cyan fill on screen. One per region, usually Load model.",
+      "html": "<button class=\"ds-btn-primary\">Load model</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem; height: 2.25rem; padding: 0 0.625rem; font: 500 0.875rem/1 \"Inter Variable\", sans-serif; color: var(--primary-foreground, oklch(0.12 0.02 190)); background: var(--primary, oklch(0.82 0.16 183)); border: 1px solid transparent; border-radius: var(--radius-md, 0.3rem); cursor: pointer; white-space: nowrap; transition: background 0.2s, box-shadow 0.2s; } .ds-btn-primary:hover { background: color-mix(in oklch, var(--primary, oklch(0.82 0.16 183)), transparent 20%); } .ds-btn-primary:focus-visible { outline: none; border-color: var(--ring, oklch(0.73 0.14 183)); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.73 0.14 183)), transparent 50%); } .ds-btn-primary:active { transform: translateY(1px); } .ds-btn-primary:disabled { opacity: 0.5; pointer-events: none; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "The default for workspace actions. Transparent at rest, muted text, fills on hover.",
+      "html": "<button class=\"ds-btn-ghost\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"/><path d=\"M21 3v5h-5\"/><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"/><path d=\"M8 16H3v5\"/></svg>Reload</button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; gap: 0.25rem; height: 2rem; padding: 0 0.625rem; font: 500 0.75rem/1 \"Inter Variable\", sans-serif; color: var(--muted-foreground, oklch(0.65 0.015 240)); background: transparent; border: 1px solid transparent; border-radius: var(--radius-md, 0.3rem); cursor: pointer; white-space: nowrap; transition: color 0.2s, background 0.2s; } .ds-btn-ghost svg { width: 0.85rem; height: 0.85rem; flex: none; } .ds-btn-ghost:hover { color: var(--foreground, oklch(0.94 0.012 235)); background: var(--muted, oklch(0.19 0.01 255)); } .ds-btn-ghost:focus-visible { outline: none; border-color: var(--ring, oklch(0.73 0.14 183)); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.73 0.14 183)), transparent 50%); } .ds-btn-ghost:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Tool Call Card",
+      "kind": "custom",
+      "refersTo": "tool-card",
+      "description": "The signature component. Square, hairline-bordered, with a clickable file path that opens the editor. Completed calls take a cyan border.",
+      "html": "<div class=\"ds-tool-card ds-tool-card--complete\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M10 12.5 8 15l2 2.5\"/><path d=\"m14 12.5 2 2.5-2 2.5\"/><path d=\"M14 2v4a2 2 0 0 0 2 2h4\"/><path d=\"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z\"/></svg><div><strong>write_file<button class=\"ds-tool-path\" type=\"button\">styles.css</button></strong><small>1.8 KB written</small></div><small class=\"ds-tool-meta\">2.4s</small></div>",
+      "css": ".ds-tool-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 0.55rem; margin: 0.45rem 0; padding: 0.55rem; color: var(--muted-foreground, oklch(0.65 0.015 240)); background: color-mix(in oklch, var(--panel-raised, oklch(0.18 0.011 255)), transparent 20%); border: 1px solid var(--border, oklch(0.29 0.014 250)); } .ds-tool-card > svg { width: 0.8rem; height: 0.8rem; margin-top: 0.1rem; color: var(--cyan-dim, oklch(0.55 0.09 183)); } .ds-tool-card > div { display: grid; min-width: 0; gap: 0.15rem; } .ds-tool-card strong { display: flex; min-width: 0; align-items: baseline; gap: 0.4rem; overflow: hidden; color: var(--foreground, oklch(0.94 0.012 235)); font: 650 0.65rem/1.35 \"Inter Variable\", sans-serif; white-space: nowrap; text-overflow: ellipsis; } .ds-tool-card small { overflow: hidden; font: 400 0.65rem/1.35 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; text-overflow: ellipsis; } .ds-tool-meta { font-variant-numeric: tabular-nums; } .ds-tool-card--complete { border-color: color-mix(in oklch, var(--primary, oklch(0.82 0.16 183)), transparent 65%); } .ds-tool-path { flex: 1 1 auto; min-width: 0; overflow: hidden; padding: 0; color: var(--accent-foreground, oklch(0.92 0.04 183)); background: transparent; border: 0; cursor: pointer; font: 500 0.65rem/1.35 ui-monospace, SFMono-Regular, Menlo, monospace; text-align: left; text-decoration: underline dotted; text-underline-offset: 0.2em; white-space: nowrap; text-overflow: ellipsis; } .ds-tool-path:hover, .ds-tool-path:focus-visible { color: var(--primary, oklch(0.82 0.16 183)); outline: none; text-decoration-style: solid; }"
+    },
+    {
+      "name": "Workspace Tab",
+      "kind": "nav",
+      "refersTo": "workspace-tab",
+      "description": "Text-only tabs with a 1px cyan rule under the active label and an optional count badge.",
+      "html": "<nav class=\"ds-tabs\"><button class=\"ds-tab is-active\" type=\"button\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"20\" height=\"14\" x=\"2\" y=\"3\" rx=\"2\"/><line x1=\"8\" x2=\"16\" y1=\"21\" y2=\"21\"/><line x1=\"12\" x2=\"12\" y1=\"17\" y2=\"21\"/></svg>Preview</button><button class=\"ds-tab\" type=\"button\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M10 12.5 8 15l2 2.5\"/><path d=\"m14 12.5 2 2.5-2 2.5\"/><path d=\"M14 2v4a2 2 0 0 0 2 2h4\"/><path d=\"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z\"/></svg>Files<span class=\"ds-badge\">3</span></button><button class=\"ds-tab\" type=\"button\">Console<span class=\"ds-badge ds-badge--error\">2</span></button></nav>",
+      "css": ".ds-tabs { display: flex; gap: 0.25rem; padding-bottom: 0.65rem; } .ds-tab { position: relative; display: inline-flex; align-items: center; gap: 0.45rem; height: 2.2rem; padding: 0 0.8rem; color: var(--muted-foreground, oklch(0.65 0.015 240)); background: transparent; border: 0; cursor: pointer; font: 560 0.75rem/1 \"Inter Variable\", sans-serif; } .ds-tab svg { width: 0.85rem; height: 0.85rem; } .ds-tab:hover { color: var(--foreground, oklch(0.94 0.012 235)); } .ds-tab:focus-visible { outline: 2px solid var(--ring, oklch(0.73 0.14 183)); outline-offset: -2px; } .ds-tab.is-active { color: var(--foreground, oklch(0.94 0.012 235)); } .ds-tab.is-active::after { position: absolute; right: 0.8rem; bottom: -0.65rem; left: 0.8rem; height: 1px; content: \"\"; background: var(--primary, oklch(0.82 0.16 183)); } .ds-badge { display: inline-grid; min-width: 1.15rem; height: 1.05rem; padding: 0 0.3rem; place-items: center; color: var(--muted-foreground, oklch(0.65 0.015 240)); background: var(--muted, oklch(0.19 0.01 255)); border-radius: 999px; font: 650 0.62rem/1 \"Inter Variable\", sans-serif; font-variant-numeric: tabular-nums; } .ds-badge--error { color: oklch(0.12 0.02 28); background: oklch(0.73 0.16 28); }"
+    },
+    {
+      "name": "Model Select Trigger",
+      "kind": "input",
+      "refersTo": "select-trigger",
+      "description": "Full-width runtime selector. Two-line option: label plus VRAM and cache state.",
+      "html": "<button class=\"ds-select\" type=\"button\"><span class=\"ds-select-option\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\"/><path d=\"M3 5V19A9 3 0 0 0 21 19V5\"/><path d=\"M3 12A9 3 0 0 0 21 12\"/></svg><span>Qwen2.5-Coder-7B-Instruct<small>5.1 GB VRAM · cached</small></span></span><svg class=\"ds-select-caret\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m6 9 6 6 6-6\"/></svg></button>",
+      "css": ".ds-select { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; width: 100%; height: 2.6rem; padding: 0 0.625rem; color: var(--foreground, oklch(0.94 0.012 235)); background: var(--panel-raised, oklch(0.18 0.011 255)); border: 1px solid var(--border, oklch(0.29 0.014 250)); border-radius: var(--radius-md, 0.3rem); cursor: pointer; font: 400 0.78rem/1.2 \"Inter Variable\", sans-serif; text-align: left; transition: border-color 0.2s, box-shadow 0.2s; } .ds-select:focus-visible { outline: none; border-color: var(--ring, oklch(0.73 0.14 183)); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.73 0.14 183)), transparent 50%); } .ds-select-option { display: flex; min-width: 0; align-items: center; gap: 0.55rem; } .ds-select-option > svg { width: 0.875rem; height: 0.875rem; flex: none; color: var(--cyan-dim, oklch(0.55 0.09 183)); } .ds-select-option > span { display: grid; min-width: 0; } .ds-select-option small { margin-top: 0.1rem; color: var(--muted-foreground, oklch(0.65 0.015 240)); font-size: 0.68rem; letter-spacing: 0.055em; font-variant-numeric: tabular-nums; } .ds-select-caret { width: 0.85rem; height: 0.85rem; flex: none; color: var(--muted-foreground, oklch(0.65 0.015 240)); }"
+    },
+    {
+      "name": "Code Well",
+      "kind": "custom",
+      "refersTo": "code-well",
+      "description": "Every surface that shows raw text: editor, console, run_js snippets, the raw model stream. Darker than the ground, square, monospace.",
+      "html": "<pre class=\"ds-well\">&lt;tool_call&gt;{\"name\": \"write_file\", \"arguments\": {\"path\": \"styles.css\"}}&lt;/tool_call&gt;</pre>",
+      "css": ".ds-well { max-height: 9rem; margin: 0; overflow: auto; padding: 0.5rem 0.6rem; color: oklch(0.72 0.03 220); background: oklch(0.11 0.008 255); border: 1px solid color-mix(in oklch, var(--primary, oklch(0.82 0.16 183)), transparent 75%); border-left-width: 2px; font: 0.62rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }"
+    },
+    {
+      "name": "Status Readout",
+      "kind": "custom",
+      "refersTo": "status-dot",
+      "description": "The status bar. System condition is always on screen: a dot that glows cyan only when live, then counts and guarantees in tracked label type.",
+      "html": "<footer class=\"ds-status\"><span><i class=\"ds-dot is-ready\"></i>Sandbox ready</span><span>14 console lines · 2 errors</span><span>Opaque origin</span><span>Scripts isolated</span></footer>",
+      "css": ".ds-status { display: flex; min-height: 1.8rem; align-items: center; gap: 1rem; padding: 0 1rem; color: var(--muted-foreground, oklch(0.65 0.015 240)); background: var(--panel, oklch(0.155 0.009 255)); border-top: 1px solid var(--border, oklch(0.29 0.014 250)); font: 650 0.68rem/1 \"Inter Variable\", sans-serif; letter-spacing: 0.055em; font-variant-numeric: tabular-nums; } .ds-status span { display: inline-flex; align-items: center; gap: 0.35rem; } .ds-status span:not(:first-child) { margin-left: auto; } .ds-dot { display: inline-block; width: 0.375rem; height: 0.375rem; background: var(--muted-foreground, oklch(0.65 0.015 240)); border-radius: 999px; box-shadow: 0 0.2rem 0.6rem color-mix(in oklch, var(--muted-foreground, oklch(0.65 0.015 240)), transparent 65%); } .ds-dot.is-ready { background: var(--primary, oklch(0.82 0.16 183)); box-shadow: 0 0.2rem 0.6rem color-mix(in oklch, var(--primary, oklch(0.82 0.16 183)), transparent 55%); }"
+    },
+    {
+      "name": "Composer",
+      "kind": "input",
+      "refersTo": "textarea-composer",
+      "description": "Two-column grid, textarea plus send, aligned to the bottom edge. Grows with the message to 9rem, then scrolls.",
+      "html": "<form class=\"ds-composer\"><textarea class=\"ds-textarea\" rows=\"2\" placeholder=\"Describe a page or a change…\"></textarea><button class=\"ds-send\" type=\"submit\" aria-label=\"Send\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 19V5\"/><path d=\"m5 12 7-7 7 7\"/></svg></button></form>",
+      "css": ".ds-composer { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 0.5rem; padding: 0.75rem 1rem 1rem; border-top: 1px solid var(--border, oklch(0.29 0.014 250)); } .ds-textarea { width: 100%; max-height: 9rem; padding: 0.5rem 0.625rem; resize: none; color: var(--foreground, oklch(0.94 0.012 235)); background: var(--panel-raised, oklch(0.18 0.011 255)); border: 1px solid var(--border, oklch(0.29 0.014 250)); border-radius: var(--radius-md, 0.3rem); font: 400 0.78rem/1.45 \"Inter Variable\", sans-serif; transition: border-color 0.2s, box-shadow 0.2s; } .ds-textarea::placeholder { color: var(--muted-foreground, oklch(0.65 0.015 240)); } .ds-textarea:focus-visible { outline: none; border-color: var(--ring, oklch(0.73 0.14 183)); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.73 0.14 183)), transparent 50%); } .ds-send { display: inline-grid; width: 2.25rem; height: 2.25rem; place-items: center; color: var(--primary-foreground, oklch(0.12 0.02 190)); background: var(--primary, oklch(0.82 0.16 183)); border: 1px solid transparent; border-radius: var(--radius-md, 0.3rem); cursor: pointer; } .ds-send svg { width: 1rem; height: 1rem; } .ds-send:hover { background: color-mix(in oklch, var(--primary, oklch(0.82 0.16 183)), transparent 20%); } .ds-send:focus-visible { outline: none; border-color: var(--ring, oklch(0.73 0.14 183)); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.73 0.14 183)), transparent 50%); } .ds-send:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Inline Confirmation",
+      "kind": "custom",
+      "refersTo": "button-destructive",
+      "description": "How every destructive action confirms. The control's own row becomes the question; there is no modal anywhere in Mote.",
+      "html": "<div class=\"ds-confirm\"><span>Delete the cached weights for Qwen2.5-Coder-7B?</span><button class=\"ds-btn-destructive\" type=\"button\">Delete</button><button class=\"ds-btn-ghost-sm\" type=\"button\">Keep</button></div>",
+      "css": ".ds-confirm { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 0.5rem; padding: 0.55rem 0.65rem; color: var(--foreground, oklch(0.94 0.012 235)); background: color-mix(in oklch, var(--destructive, oklch(0.68 0.2 25)), transparent 90%); border: 1px solid color-mix(in oklch, var(--destructive, oklch(0.68 0.2 25)), transparent 55%); font: 400 0.7rem/1.35 \"Inter Variable\", sans-serif; } .ds-btn-destructive { height: 2rem; padding: 0 0.625rem; color: var(--destructive, oklch(0.68 0.2 25)); background: color-mix(in oklch, var(--destructive, oklch(0.68 0.2 25)), transparent 80%); border: 1px solid transparent; border-radius: var(--radius-md, 0.3rem); cursor: pointer; font: 500 0.75rem/1 \"Inter Variable\", sans-serif; transition: background 0.2s; } .ds-btn-destructive:hover { background: color-mix(in oklch, var(--destructive, oklch(0.68 0.2 25)), transparent 70%); } .ds-btn-destructive:focus-visible { outline: none; border-color: color-mix(in oklch, var(--destructive, oklch(0.68 0.2 25)), transparent 60%); box-shadow: 0 0 0 3px color-mix(in oklch, var(--destructive, oklch(0.68 0.2 25)), transparent 80%); } .ds-btn-ghost-sm { height: 2rem; padding: 0 0.625rem; color: var(--muted-foreground, oklch(0.65 0.015 240)); background: transparent; border: 1px solid transparent; border-radius: var(--radius-md, 0.3rem); cursor: pointer; font: 500 0.75rem/1 \"Inter Variable\", sans-serif; } .ds-btn-ghost-sm:hover { color: var(--foreground, oklch(0.94 0.012 235)); background: var(--muted, oklch(0.19 0.01 255)); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Cold Instrument",
+    "overview": "Mote looks like a bench instrument in a dark lab. It is unlabeled until you know it, dense with readouts, and honest about its own state at all times. Nothing is explained; everything is displayed. The surface is a near-black graphite with a faint blue cast, ruled into panels by hairline borders, and the only color in the room is a single cyan that means this is live. Numbers are everywhere — VRAM, bytes, tokens per second, console counts, percentages — and they are set in tabular figures so they tick in place instead of jittering.\n\nThe density is deliberate and high. Type runs small (0.62–1rem across the entire application; there is no display type anywhere in the chrome), letter-spacing on labels is opened up to 0.055em so they stay legible at that size, and structural padding rarely exceeds 1rem. This is an interface for someone who already knows what the controls do. Affordance comes from precision and immediate response, not from generous hit areas or explanatory color.\n\nThe one thing the design must never do is look like an AI product. There are no purple gradients, no sparkles, no robot or brain imagery, and no friendly-assistant framing anywhere in the system — this is a standing brand commitment, not a stylistic preference. Mote is infrastructure: a runtime, a debugger, a piece of machinery small enough to fit in a tab. The cyan is not a brand color being applied decoratively; it is a lamp, and lamps mean something.",
+    "keyCharacteristics": [
+      "Dark-only. color-scheme: dark is set at the root; there is no light theme and no toggle.",
+      "One accent, used sparingly, always meaning \"live\" or \"selected\".",
+      "Flat by construction — no drop shadows anywhere; depth is four tonal surface steps and 1px borders.",
+      "Square structure, softened controls.",
+      "Every number is tabular; every measurement is visible.",
+      "Monospace is reserved for code, logs, paths, and measurements — never for decoration."
+    ],
+    "rules": [
+      {
+        "name": "The Single Signal Rule",
+        "body": "Signal Cyan marks exactly one thing per region: what is live, or what is selected. If two elements in the same pane are cyan, one of them is wrong. Its rarity is the entire reason it reads as a lamp.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Reds Rule",
+        "body": "Alert Red (oklch(0.68 0.2 25)) is for actions you can take — destructive buttons, inline delete confirmations, error banners you must respond to. Log Red (oklch(0.73 0.16 28)) is for things that already happened — console output, failed tool calls, error counts. They are close enough to be mistaken for each other and must never be swapped.",
+        "section": "colors"
+      },
+      {
+        "name": "The Cool Axis Rule",
+        "body": "Every neutral sits at hue 235–255 with chroma ≤0.015. A neutral warmer than that, or more saturated, breaks the read that the cyan is the only real color in the room.",
+        "section": "colors"
+      },
+      {
+        "name": "The Monospace Is Evidence Rule",
+        "body": "Monospace means the characters matter individually: source code, console output, file paths, and run_js snippets. It is never used for headings, labels, buttons, or atmosphere. A monospace heading would make Mote look like a product imitating a terminal instead of being an instrument.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "Every number that can change in place gets font-variant-numeric: tabular-nums — progress percentages, byte counts, VRAM, tokens per second, file sizes, console counts, timestamps, the version. A readout that reflows while it updates is a broken readout.",
+        "section": "typography"
+      },
+      {
+        "name": "The Small-And-Tracked Rule",
+        "body": "Below 0.7rem, letter-spacing opens to 0.055em and weight rises to 650. Small type in this system is dense on purpose, never faint: reach for tracking and weight before reaching for a larger size.",
+        "section": "typography"
+      },
+      {
+        "name": "The Nothing-Below-The-Fold Rule",
+        "body": "Every grid row that contains a scroll container declares min-height: 0, and every flexible track is minmax(0, 1fr), never bare 1fr. A grid item's automatic minimum is its content, so without this the message list pushes the composer off screen as the conversation grows and the action bar widens the page on mobile. This is not a preference — it is the reason the layout works.",
+        "section": "layout"
+      },
+      {
+        "name": "The Glow Means Alive Rule",
+        "body": "A glow is a state signal, never atmosphere. It appears only on elements that are actually live — a loaded runtime, a ready sandbox, the running mote. Adding a glow for warmth makes every real signal in the interface unreadable.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Inset Rule",
+        "body": "Selection and active state are a 1px inset cyan rule, never a fill. Fills at this density read as disabled surfaces; the rule reads as a marker.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Milled Panel Rule",
+        "body": "If it holds something, it is square. If you press it or type into it, it is 0.3rem. If it counts or reports, it is a pill. There is no fourth case.",
+        "section": "shapes"
+      },
+      {
+        "name": "The Inline Confirmation Rule",
+        "body": "Destructive actions confirm in place, never through window.confirm. The control's own row becomes a confirmation strip — the question, a destructive confirm, a ghost cancel — bordered and washed in Alert Red. Reset does the same by swapping its own label to \"Replace all files?\" and reverting after 4 seconds or on blur. A modal dialog would block the tab and the automation harness both.",
+        "section": "components"
+      },
+      {
+        "name": "The Readout Rule",
+        "body": "System state is always on screen, never behind a hover or a menu: sandbox readiness, console line and error counts, the origin guarantees, storage used, VRAM, tokens per second. The status bar's job is to make the machine's condition continuously legible.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Do keep Signal Cyan to one meaning — live or selected — and to roughly one element per region. Everything else that needs to feel cyan uses Trace Cyan.",
+      "Do set font-variant-numeric: tabular-nums on every changing number.",
+      "Do give every new scroll region min-height: 0 and every flexible grid track minmax(0, 1fr).",
+      "Do reach for color-mix(in oklch, <token>, transparent N%) to recede a border or fill. That is how this system makes a value quieter — not by introducing a new token.",
+      "Do confirm destructive actions inline, in the control's own row.",
+      "Do keep chrome heights aligned: 4rem top bars, 2.6rem section headers, 1.8rem status bar.",
+      "Do reserve monospace for code, logs, paths, and measurements.",
+      "Do test every UI change at ≤760px, where the shell stacks into two full-height screens."
+    ],
+    "donts": [
+      "Don't introduce purple gradients, sparkles, robot or brain imagery, or friendly-assistant framing. This is a standing brand commitment from PRODUCT.md, not a style preference.",
+      "Don't add drop shadows. If something needs to separate, it takes a border or a tonal step.",
+      "Don't use a glow for atmosphere. A glow means the element is live.",
+      "Don't round a panel, a tool card, a code well, or a progress track. Structure is square.",
+      "Don't animate layout properties — width, height, padding, margin — on the load progress bar. The design detector hook blocks those writes, and the bar's inner span width is the one exception that is already accounted for.",
+      "Don't put Inter, or any other webfont, into the sandbox starter CSS. The host application keeps Inter; generated pages use a system stack, because they are a different world and because a sandboxed page cannot load fonts through the CSP.",
+      "Don't call window.confirm, alert, or prompt from the host or the sandbox. The sandbox runtime deliberately replaces all three with an in-page toast plus a console line.",
+      "Don't add a light theme or a theme toggle. color-scheme: dark is set at the root and the entire palette is built for it.",
+      "Don't use Alert Red for things that already happened, or Log Red on a control you can press."
+    ]
+  }
+}
