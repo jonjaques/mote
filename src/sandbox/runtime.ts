@@ -14,7 +14,12 @@ export interface SandboxResponse {
   result?: unknown
   error?: string
   console?: SandboxConsoleEntry[]
+  consoleDropped?: number
 }
+
+// The host keeps this many console lines. A model-written loop can emit tens of thousands;
+// past a couple of thousand the list stops being readable and only costs render time.
+const MAX_CONSOLE_ENTRIES = 2_000
 
 interface PendingRequest {
   resolve(value: SandboxResponse): void
@@ -23,14 +28,27 @@ interface PendingRequest {
 
 function sandboxBootstrap() {
   const channel = 'mote:sandbox'
-  const history: Array<{
+  // What a single run_js may report back. This buffer used to be an ever-growing `history`
+  // that existed only to compute a delta, so a loop with a console.log in it grew the
+  // sandbox heap forever and then pushed every line into the model's 8k context as a tool
+  // result. Draining on each request bounds both.
+  const MAX_PENDING_CONSOLE = 200
+  let pending: Array<{
     id: string
     level: ConsoleLevel
     args: string[]
     timestamp: number
   }> = []
-  let consoleCursor = 0
+  let pendingDropped = 0
   let sequence = 0
+
+  function drainPending() {
+    const entries = pending
+    const dropped = pendingDropped
+    pending = []
+    pendingDropped = 0
+    return { entries, dropped }
+  }
 
   function serialize(value: unknown): string {
     if (typeof value === 'string') return value
@@ -50,7 +68,8 @@ function sandboxBootstrap() {
       args: values.map(serialize),
       timestamp: Date.now(),
     }
-    history.push(entry)
+    if (pending.length < MAX_PENDING_CONSOLE) pending.push(entry)
+    else pendingDropped += 1
     window.parent.postMessage({ type: 'mote:console', channel, entry }, '*')
   }
 
@@ -132,8 +151,7 @@ function sandboxBootstrap() {
     if (request.type === 'mote:run') {
       try {
         const result = await Promise.resolve(new Function(request.code)())
-        const newConsole = history.slice(consoleCursor)
-        consoleCursor = history.length
+        const drained = drainPending()
         window.parent.postMessage(
           {
             type: 'mote:response',
@@ -141,13 +159,13 @@ function sandboxBootstrap() {
             id: request.id,
             ok: true,
             result: serialize(result),
-            console: newConsole,
+            console: drained.entries,
+            consoleDropped: drained.dropped,
           },
           '*',
         )
       } catch (error) {
-        const newConsole = history.slice(consoleCursor)
-        consoleCursor = history.length
+        const drained = drainPending()
         window.parent.postMessage(
           {
             type: 'mote:response',
@@ -155,7 +173,8 @@ function sandboxBootstrap() {
             id: request.id,
             ok: false,
             error: serialize(error),
-            console: newConsole,
+            console: drained.entries,
+            consoleDropped: drained.dropped,
           },
           '*',
         )
@@ -186,7 +205,12 @@ export const SANDBOX_RUNTIME = `(${sandboxBootstrap.toString()})();`
 export class SandboxBridge {
   private frameWindow: Window | null = null
   private pending = new Map<string, PendingRequest>()
+  // Mutable ring; subscribers get `consoleSnapshot`, rebuilt once per frame. Copying the
+  // array on every incoming line meant one React render per console.log.
   private consoleEntries: SandboxConsoleEntry[] = []
+  private consoleSnapshot: SandboxConsoleEntry[] = []
+  private consoleDropped = 0
+  private consoleFlush: number | null = null
   private consoleListeners = new Set<(entries: SandboxConsoleEntry[]) => void>()
   private readyListeners = new Set<(ready: boolean) => void>()
   private ready = false
@@ -201,14 +225,14 @@ export class SandboxBridge {
     this.frameWindow = frameWindow
     this.documentRevision += 1
     this.ready = false
-    this.consoleEntries = []
+    this.resetConsole()
     this.emitConsole()
     this.emitReady()
   }
 
   subscribeConsole(listener: (entries: SandboxConsoleEntry[]) => void): () => void {
     this.consoleListeners.add(listener)
-    listener(this.consoleEntries)
+    listener(this.consoleSnapshot)
     return () => this.consoleListeners.delete(listener)
   }
 
@@ -219,12 +243,32 @@ export class SandboxBridge {
   }
 
   getConsoleEntries(): SandboxConsoleEntry[] {
-    return this.consoleEntries
+    return this.consoleSnapshot
   }
 
   clearConsole(): void {
-    this.consoleEntries = []
+    this.resetConsole()
     this.emitConsole()
+  }
+
+  private resetConsole(): void {
+    if (this.consoleFlush !== null) {
+      cancelAnimationFrame(this.consoleFlush)
+      this.consoleFlush = null
+    }
+    this.consoleEntries = []
+    this.consoleSnapshot = []
+    this.consoleDropped = 0
+  }
+
+  // One flush per frame, however many lines arrive in between. rAF also parks the work while
+  // the tab is hidden, which is the right answer for output nobody is looking at.
+  private scheduleConsoleFlush(): void {
+    if (this.consoleFlush !== null) return
+    this.consoleFlush = requestAnimationFrame(() => {
+      this.consoleFlush = null
+      this.emitConsole()
+    })
   }
 
   async run(code: string): Promise<SandboxResponse> {
@@ -282,8 +326,13 @@ export class SandboxBridge {
     }
 
     if (event.data.type === 'mote:console') {
-      this.consoleEntries = [...this.consoleEntries, event.data.entry as SandboxConsoleEntry]
-      this.emitConsole()
+      this.consoleEntries.push(event.data.entry as SandboxConsoleEntry)
+      const overflow = this.consoleEntries.length - MAX_CONSOLE_ENTRIES
+      if (overflow > 0) {
+        this.consoleEntries.splice(0, overflow)
+        this.consoleDropped += overflow
+      }
+      this.scheduleConsoleFlush()
       return
     }
 
@@ -298,7 +347,23 @@ export class SandboxBridge {
   }
 
   private emitConsole(): void {
-    for (const listener of this.consoleListeners) listener(this.consoleEntries)
+    // The dropped notice rides in the list itself rather than in a separate channel, so it
+    // shows up where someone is already looking and reaches the tool results unchanged.
+    this.consoleSnapshot =
+      this.consoleDropped === 0
+        ? [...this.consoleEntries]
+        : [
+            {
+              id: 'mote:console-dropped',
+              level: 'warn',
+              args: [
+                `${this.consoleDropped.toLocaleString()} earlier lines dropped — the console keeps the last ${MAX_CONSOLE_ENTRIES.toLocaleString()}.`,
+              ],
+              timestamp: this.consoleEntries[0]?.timestamp ?? Date.now(),
+            },
+            ...this.consoleEntries,
+          ]
+    for (const listener of this.consoleListeners) listener(this.consoleSnapshot)
   }
 
   private emitReady(): void {

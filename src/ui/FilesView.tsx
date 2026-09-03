@@ -107,6 +107,7 @@ export function FilesView() {
             key={file.path}
             type="button"
             className={file.path === selected?.path ? 'is-selected' : ''}
+            aria-current={file.path === selected?.path ? 'true' : undefined}
             onClick={() => dispatch({ type: 'openFile', path: file.path })}
           >
             {fileIcon(file.path)}
@@ -119,7 +120,9 @@ export function FilesView() {
         <header>
           <span>
             {selected?.path}
-            {dirty && <em className="file-dirty" aria-label="Unsaved changes" />}
+            {/* role="img" is what makes the label legal: ARIA prohibits naming a generic
+                element, so the bare <em> was silent to a screen reader. */}
+            {dirty && <em className="file-dirty" role="img" aria-label="Unsaved changes" />}
           </span>
           <div className="file-actions">
             <Button

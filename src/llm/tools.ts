@@ -171,9 +171,13 @@ const tools: ToolDefinition[] = [
     async run(arguments_) {
       const code = requireString(arguments_, 'code')
       const response = await sandboxBridge.run(code)
+      // Say so when the sandbox truncated: otherwise the model reads a partial log as the
+      // whole story and "concludes" from output it never saw.
+      const dropped = response.consoleDropped ?? 0
+      const ran = response.ok ? 'JavaScript ran in the sandbox.' : 'Sandbox JavaScript threw.'
       return {
         ok: response.ok,
-        summary: response.ok ? 'JavaScript ran in the sandbox.' : 'Sandbox JavaScript threw.',
+        summary: dropped ? `${ran} ${dropped} further console lines were dropped.` : ran,
         value: {
           result: response.result,
           error: response.error,
