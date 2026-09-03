@@ -257,6 +257,26 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Green because the meaning is "something new is resident here", the same channel a written
+   file and a cached model use. It replaces the version chip rather than sitting beside it:
+   the version on screen is no longer the version that would run after a reload. */
+.version-update {
+  padding: 0.15rem 0.4rem;
+  border: 1px solid color-mix(in oklch, var(--signal-write), transparent 60%);
+  color: var(--signal-write);
+  background: none;
+  cursor: pointer;
+}
+
+.version-update:hover {
+  background: color-mix(in oklch, var(--signal-write), transparent 88%);
+}
+
+.version-update:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
 .model-panel {
   padding: 1rem;
   border-bottom: 1px solid var(--border);
@@ -1319,6 +1339,83 @@
   font-weight: 650;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+/* The catalog is the whole prebuilt list, so each group heading carries its size: "Fits this
+   device 94" is the answer to a question the menu would otherwise make you scroll to find. */
+.model-menu .group-count {
+  color: color-mix(in oklch, var(--muted-foreground), transparent 40%);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A row the device cannot run keeps its text at full contrast — it is still information — and
+   loses only the channel colour, which would otherwise promise a download that cannot happen. */
+.model-option.is-unavailable > svg {
+  color: var(--muted-foreground);
+}
+
+/* What WebGPU will admit about the machine, and the budget Mote inferred from it. Directly
+   under the menu because it is the sentence that explains the menu's grouping. */
+.device-line {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.55rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.66rem;
+  line-height: 1.4;
+}
+
+.device-line svg {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex: none;
+  color: var(--cyan-dim);
+}
+
+.device-line span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Warn, not refuse: a tight fit may still load. The diagnostic ramp, not a signal channel —
+   this is a statement about what could go wrong, not about what the runtime is doing. */
+.fit-warning {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.6rem 0 0;
+  padding: 0.55rem 0.6rem;
+  color: color-mix(in oklch, var(--log-warn), white 14%);
+  background: color-mix(in oklch, var(--log-warn), transparent 90%);
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.fit-warning svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  flex: none;
+  margin-top: 0.1rem;
+}
+
+.link-button {
+  padding: 0;
+  border: 0;
+  color: var(--primary);
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.link-button:hover {
+  text-decoration: underline;
+}
+
+.link-button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 .model-confirm {

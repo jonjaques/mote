@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 
+import { track } from '@/analytics'
 import { setAutomationGenerating, setAutomationStatus } from '@/automation'
 import {
   deleteCachedModel,
@@ -7,7 +8,7 @@ import {
   loadModel,
   prepareEngine,
 } from '@/llm/engine'
-import { FAST_MODEL_ID, runPreflight } from '@/llm/models'
+import { chooseDefaultModel, runPreflight } from '@/llm/models'
 import { AppStateProvider, useAppState } from '@/state'
 import { MainArea } from '@/ui/MainArea'
 import { SidePane } from '@/ui/SidePane'
@@ -28,6 +29,8 @@ function MoteApp() {
     if (!selected) return
 
     dispatch({ type: 'modelChecking' })
+    const startedAt = performance.now()
+    const wasCached = state.model.cachedIds.has(selected.id)
     try {
       await loadModel(selected, (report) => {
         dispatch({ type: 'modelProgress', report })
@@ -35,6 +38,12 @@ function MoteApp() {
       })
       dispatch({ type: 'modelReady', id: selected.id })
       setAutomationStatus({ phase: 'ready', model: selected.id, progress: 1 })
+      track('model_loaded', {
+        model: selected.id,
+        source: selected.source,
+        cached: wasCached,
+        seconds: Math.round((performance.now() - startedAt) / 1_000),
+      })
       try {
         localStorage.setItem(LAST_MODEL_KEY, selected.id)
       } catch {
@@ -44,8 +53,9 @@ function MoteApp() {
       const message = error instanceof Error ? error.message : String(error)
       dispatch({ type: 'modelError', message })
       setAutomationStatus({ phase: 'error', model: selected.id, error: message })
+      track('model_load_failed', { model: selected.id, source: selected.source })
     }
-  }, [dispatch, state.model.selectedId, state.models])
+  }, [dispatch, state.model.cachedIds, state.model.selectedId, state.models])
 
   useEffect(() => {
     if (initialized.current) return
@@ -59,6 +69,7 @@ function MoteApp() {
         // No worker, no catalog, no cache probe. There is nothing on this machine for any of
         // it to run on, and the harness needs a phase it can fail on rather than a timeout.
         setAutomationStatus({ phase: 'unsupported', error: verdict.detected })
+        track('preflight_failed', { reason: verdict.reason })
         return
       }
 
@@ -71,16 +82,16 @@ function MoteApp() {
         } catch {
           remembered = null
         }
-        const requestedId = params.get('model') ?? remembered ?? FAST_MODEL_ID
-        const requestedModel =
-          models.find((model) => model.baseId === requestedId && model.source === 'local') ??
-          models.find((model) => model.id === requestedId) ??
-          models.find((model) => model.baseId === requestedId) ??
-          models[0]
+
+        // The cache probe comes first because it is an input to the choice: a visitor who has
+        // already paid for a model's weights should land on that model, not on the one this
+        // device could theoretically hold.
+        const cachedIds = await getCachedModelIds(models)
+        const requestedId = params.get('model') ?? remembered
+        const requestedModel = chooseDefaultModel(models, verdict.device, cachedIds, requestedId)
 
         if (!requestedModel) throw new Error('No compatible WebLLM models were found.')
 
-        const cachedIds = await getCachedModelIds(models)
         autoloadRequested.current =
           params.get('autoload') === '1' ||
           (!params.has('model') && remembered === requestedModel.id && cachedIds.has(requestedModel.id))

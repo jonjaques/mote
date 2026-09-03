@@ -1,4 +1,4 @@
-# Handoff — 2026-09-02
+# Handoff — 2026-09-03
 
 You are taking over **Mote** (`llmcoder`): a browser-only coding agent where a
 local WebLLM model edits an HTML/CSS/JS project that renders in a sandboxed
@@ -7,9 +7,12 @@ is true on disk right now, what was measured, and what to do next.
 
 ## Snapshot
 
-- Branch `main`, no remote. Package manager **pnpm**.
-- `pnpm build` (tsc + vite), `pnpm test` (vitest, 49 tests) and `pnpm lint`
-  (only the pre-existing shadcn fast-refresh warnings) are green.
+- Branch `prod-hardening` off `main`, no remote yet. The repo is about to be
+  pushed to GitHub and deployed to **Cloudflare Pages** from `main`, at
+  `https://mote.jonjaques.com`. Package manager **pnpm**.
+- `pnpm build` (tsc + vite), `pnpm test` (vitest, 61 tests) and `pnpm lint`
+  (only the pre-existing shadcn fast-refresh warnings) are green. The build was
+  also run on Node 22.23.2, which is what `.node-version` pins for the deploy.
 - Dev server: `pnpm dev --port 5180 --strictPort` → http://localhost:5180/.
   Other agents on this machine use 5173/5174.
 - Local mirrors in `./models/` (gitignored), all verified complete with
@@ -83,6 +86,61 @@ Documented in `DESIGN.md` > Colors, and `detect.mjs` reports no findings.
 parsing and scanning, the agent loop against a scripted engine, srcdoc
 assembly, the virtual filesystem, the model catalog.
 
+## Production hardening (this branch)
+
+Everything below was added for the public deploy and verified in a real Chrome
+against `pnpm preview`, not only in tests.
+
+**Identity.** `assets/mark.svg` is the brand symbol from `DESIGN.md` — frame,
+two corner cells, one lit core — and `pnpm assets` rasterises it into the
+favicon, the three PWA icons and `public/og.png` (1200×630) with headless
+Chrome. The starter template's purple bolt and its social-icon sheet are gone.
+`index.html` carries the title, description, canonical, Open Graph and Twitter
+tags pointing at the production origin.
+
+**Analytics.** `analytics()` in `vite.config.ts` injects the gtag pair only when
+`GA_MEASUREMENT_ID` is set at build time and matches `G-XXXXXXXXXX`. Verified
+both ways: with the variable the tag is in `dist/index.html`, without it the
+built HTML contains no reference to googletagmanager and `window.gtag` is
+`undefined` in the browser. Three events are sent (`model_loaded`,
+`model_load_failed`, `preflight_failed`), carrying model ids and durations only.
+
+**The mirror is dev-only.** `loadLocalRecords()` short-circuits on
+`import.meta.env.DEV`; a production build never requests `/models/index.json`.
+There is a test asserting `fetch` is not called.
+
+**The whole catalog.** The picker now offers all 159 prebuilt chat models
+(embeddings excluded — they throw on `reload`), each row showing the real id,
+its quantisation, VRAM, `1k context` where that applies, and its role. Rows are
+grouped by what the device can hold: on this machine 3 recommended, 144 fitting,
+9 tight, 3 disabled as beyond it. The budget is inferred from
+`navigator.deviceMemory` at 75% (6 GB here, matching the figure the 7B was
+measured against) and the adapter line states it. Two findings came out of
+building it: only 29 of the 85 `f16` records declare `shader-f16`, so fit is
+decided by the quantisation string instead; and six ids in the Phi family carry
+no size token at all, so their parameter counts are a small explicit table.
+
+**Default selection.** `chooseDefaultModel` prefers an explicit `?model=` or the
+remembered id, then the largest cached model, then the *starter* — the smallest
+proven model that still builds whole pages (the 1.5B coder, 830 MB), not the
+most capable one. `Best fit` in the readout names the 7B and selects it in one
+click. `?model=&autoload=1` is unchanged, so both harness scripts still work.
+
+**PWA and service worker.** `src/sw.js` is emitted to `dist/sw.js` with a
+precache manifest and a content-addressed build id. Navigations are network
+first with the cached shell as the offline answer; `/assets/*` is cache-first;
+icons and fonts are stale-while-revalidate. Cross-origin URLs, `/models/*` and
+range requests are never handled, so nothing sits in front of a weight fetch.
+Verified: with the preview server killed, a reload rendered the full shell from
+cache; `parent.document` and `localStorage` still throw `SecurityError` inside
+the sandbox; pressing "Update ready" swapped the waiting worker, reloaded, and
+deleted the previous caches.
+
+**Cloudflare.** `public/_headers` carries HSTS, nosniff, frame denial,
+referrer policy, COOP, a permissions policy, immutable caching for `/assets/*`
+and `must-revalidate` for `/sw.js`. `.node-version`, `packageManager`,
+`robots.txt`, `sitemap.xml` and `manifest.webmanifest` round it out.
+
 ## Measurements
 
 Final configuration unless noted. One trial = one fresh project.
@@ -147,7 +205,24 @@ Decisions these numbers settled:
    discarded an in-progress edit. Files and Console now mount on first open
    and stay mounted, hiding with `visibility` the way the preview iframe
    always has. Anything added to that section must do the same.
-10. Still true from earlier: `resolve/main/` in local records, JSON 404 for
+10. **A host CSP with `script-src` kills the sandbox, silently.** A policy on
+   the host document is inherited by srcdoc children. Measured against the real
+   iframe attributes and the real sandbox CSP: with no header, inline script and
+   `new Function` run; with `default-src 'self'; script-src 'self'`, the frame
+   goes dead with nothing in the console the host can see; with
+   `object-src 'none'; base-uri 'self'; frame-ancestors 'none';
+   form-action 'self'`, everything runs. `public/_headers` ships the third.
+11. **A service worker sits in front of the weight fetches too.** Workers created
+   by a controlled page are controlled. `sw.js` therefore handles same-origin
+   GETs only and never `/models/*`, cross-origin, or range requests. A broad
+   runtime-caching rule would duplicate gigabytes into a second cache and evict
+   the one WebLLM reads.
+12. **`vite preview` defaults to port 4173, and so does every other Vite app.**
+   Testing the built app there registers Mote's worker on an origin another
+   project may already own (a foreign `inertialref-v1` cache was sitting in it),
+   which is why the first load showed "Update ready" — correctly. Unregister
+   when done, or preview on a port of your own.
+13. Still true from earlier: `resolve/main/` in local records, JSON 404 for
    mirror misses, absolute same-origin URLs, `user` + `<tool_response>` for
    Qwen, no `baseUrl`, no `models/` in `public/`, `.cdp-profile/` and
    `models/` ignored by Vite's watcher.
@@ -155,7 +230,14 @@ Decisions these numbers settled:
 ## Unverified
 
 - Nothing was measured against Hugging Face-served records; every run used
-  the local mirror.
+  the local mirror. The deployed path is exactly the unmeasured one.
+- The service worker, the offline shell and the update swap were verified
+  against `vite preview` on this machine, not against Cloudflare's edge. The
+  `_headers` file has never been applied by Pages.
+- No model has been loaded from a device without `shader-f16`, so the "blocked"
+  tier is reasoned from the quantisation, not observed.
+- The PWA was checked as installable (manifest, icons, scope) but never actually
+  installed to a home screen.
 - Continue (`finish_reason === "length"`) was never triggered by a harness
   prompt.
 - The stacked layout was checked by screenshot at 390 and 760 px, not on a
@@ -163,7 +245,21 @@ Decisions these numbers settled:
 
 ## Next
 
-1. Reproduce landmine 3 with `pnpm cdp:agent --scenario coffee --trials 3
+1. **First deploy.** Push to GitHub, point Cloudflare Pages at `main` with
+   `pnpm build` / `dist`, set `GA_MEASUREMENT_ID`, then re-check on the live
+   origin: the `_headers` actually applied, the service worker registering on a
+   clean origin (no prior registration, so no "Update ready" on a first visit),
+   and one cold model load straight from Hugging Face — the path nothing has
+   ever measured.
+2. **The initial payload is 2.3 MB gzipped and ships twice.** `@mlc-ai/web-llm`
+   is imported on the main thread (engine + `prebuiltAppConfig`) and again in
+   the worker chunk, so a first visit downloads ~4.6 MB of JavaScript before
+   anything renders. FCP is 124 ms warm on this machine, so it is a cold-start
+   cost only. Fixing it means splitting the device probe out of `models.ts`
+   (it is the reason `state.tsx` pulls the library in at all) and importing the
+   engine and catalog dynamically after first paint. Measure before and after,
+   and re-run `pnpm cdp:agent` — the autoload path is timing-sensitive.
+3. Reproduce landmine 3 with `pnpm cdp:agent --scenario coffee --trials 3
    --model Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC` and no other model loaded
    anywhere. If `!! target crashed` prints, it is memory; consider lowering
    the 7B's context override or unloading before a switch.

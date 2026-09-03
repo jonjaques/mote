@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "pnpm@11.22.0",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -11,7 +12,8 @@
     "preview": "vite preview",
     "models": "node scripts/webllm-models.mjs",
     "cdp:trace": "node scripts/cdp-trace.mjs",
-    "cdp:agent": "node scripts/cdp-agent.mjs"
+    "cdp:agent": "node scripts/cdp-agent.mjs",
+    "assets": "node scripts/render-assets.mjs"
   },
   "dependencies": {
     "@codemirror/lang-css": "^6.3.1",
