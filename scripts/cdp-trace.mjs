@@ -45,6 +45,14 @@ const { values: opts } = parseArgs({
 
 const ARTIFACT_HOST = /huggingface\.co|hf\.co|xethub|cdn-lfs|raw\.githubusercontent\.com/;
 
+function isArtifactUrl(value) {
+  const url = new URL(value);
+  return ARTIFACT_HOST.test(url.host) || (
+    (url.hostname === "localhost" || url.hostname === "127.0.0.1") &&
+    url.pathname.startsWith("/models/")
+  );
+}
+
 function kindOf(url) {
   const file = url.split("?")[0].split("/").pop() ?? "";
   if (/^params_shard_\d+\.bin$/.test(file)) return "shard";
@@ -181,7 +189,7 @@ async function main() {
       const target = sessions.get(sessionId);
       if (method === "Network.requestWillBeSent") {
         const { requestId, request, timestamp, redirectResponse } = params;
-        if (!ARTIFACT_HOST.test(request.url)) return;
+        if (!isArtifactUrl(request.url)) return;
         const existing = requests.get(requestId);
         if (existing && redirectResponse) {
           // HF answers /resolve/ with a 302 to its CDN; keep the logical URL, note the hop.
@@ -254,12 +262,21 @@ async function main() {
     console.error(`page loaded; WebGPU adapter: ${gpu}`);
 
     if (opts.send) {
+      // Mote exposes load state explicitly; waiting for "ready" prevents a prompt typed during
+      // shader compilation from disappearing into the disabled composer.
+      for (let i = 0; i < 600; i++) {
+        const state = await evaluate("window.__llmcoder ?? null").catch(() => null);
+        if (!state || state.phase === "ready") break;
+        if (state.phase === "error") throw new Error(`model load failed: ${state.error}`);
+        await sleep(200);
+      }
+
       // readyState says nothing about a client-rendered SPA; chat.webllm.ai mounts its composer
       // a few seconds after load, so poll for the textarea instead of trusting the first look.
       let focused = false;
       for (let i = 0; i < 150 && !focused; i++) {
         focused = await evaluate(
-          "(() => { const t = document.querySelector('textarea'); if (!t) return false; t.focus(); return true; })()",
+          "(() => { const t = document.querySelector('textarea'); if (!t || t.disabled) return false; t.focus(); return true; })()",
         ).catch(() => false);
         if (!focused) await sleep(200);
       }
@@ -287,7 +304,8 @@ async function main() {
         process.stderr.write(`\r  ${line}   `);
         lastPrinted = line;
       }
-      if (requests.size > 0 && Date.now() - lastActivity > idleMs) break;
+      const appGenerating = await evaluate("Boolean(window.__llmcoder?.generating)").catch(() => false);
+      if (requests.size > 0 && !appGenerating && Date.now() - lastActivity > idleMs) break;
     }
     process.stderr.write("\n");
 
@@ -299,6 +317,14 @@ async function main() {
       }
       out.serviceWorker = navigator.serviceWorker?.controller?.scriptURL ?? null;
       return out;
+    })()`).catch((e) => ({ error: e.message }));
+    trace.app = await evaluate(`(() => {
+      if (!window.__llmcoder) return null;
+      return {
+        status: window.__llmcoder,
+        chat: document.querySelector(".message-list")?.innerText ?? "",
+        project: localStorage.getItem("mote:project:v1"),
+      };
     })()`).catch((e) => ({ error: e.message }));
 
     trace.requests = [...requests.values()];

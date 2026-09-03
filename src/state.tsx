@@ -1,6 +1,7 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useMemo,
   useReducer,
   type Dispatch,
@@ -9,7 +10,10 @@ import {
 
 import type { InitProgressReport } from '@mlc-ai/web-llm'
 
+import type { AgentToolActivity } from '@/llm/agent'
 import type { AvailableModel } from '@/llm/models'
+
+const CHAT_STORAGE_KEY = 'mote:chat:v1'
 
 export type ModelPhase = 'idle' | 'checking' | 'loading' | 'ready' | 'error'
 
@@ -18,6 +22,8 @@ export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   pending?: boolean
+  cutOff?: boolean
+  tools?: AgentToolActivity[]
 }
 
 export interface ModelState {
@@ -47,19 +53,40 @@ type Action =
   | { type: 'modelDeleted'; id: string }
   | { type: 'appendMessage'; message: ChatMessage }
   | { type: 'streamMessage'; id: string; content: string }
-  | { type: 'finishMessage'; id: string }
+  | { type: 'toolActivity'; messageId: string; activity: AgentToolActivity }
+  | { type: 'finishMessage'; id: string; cutOff?: boolean }
   | { type: 'setGenerating'; value: boolean }
   | { type: 'resetChat' }
 
-const initialState: AppState = {
-  models: [],
-  model: {
-    phase: 'idle',
-    selectedId: '',
-    cachedIds: new Set(),
-  },
-  messages: [],
-  generating: false,
+function loadMessages(): ChatMessage[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(CHAT_STORAGE_KEY) ?? '[]')
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((message): message is ChatMessage => {
+      if (!message || typeof message !== 'object') return false
+      const candidate = message as Partial<ChatMessage>
+      return (
+        typeof candidate.id === 'string' &&
+        (candidate.role === 'user' || candidate.role === 'assistant') &&
+        typeof candidate.content === 'string'
+      )
+    })
+  } catch {
+    return []
+  }
+}
+
+function createInitialState(): AppState {
+  return {
+    models: [],
+    model: {
+      phase: 'idle',
+      selectedId: '',
+      cachedIds: new Set(),
+    },
+    messages: loadMessages(),
+    generating: false,
+  }
 }
 
 function reducer(state: AppState, action: Action): AppState {
@@ -133,11 +160,31 @@ function reducer(state: AppState, action: Action): AppState {
             : message,
         ),
       }
+    case 'toolActivity':
+      return {
+        ...state,
+        messages: state.messages.map((message) => {
+          if (message.id !== action.messageId) return message
+          const tools = message.tools ?? []
+          const existing = tools.findIndex((tool) => tool.id === action.activity.id)
+          return {
+            ...message,
+            tools:
+              existing === -1
+                ? [...tools, action.activity]
+                : tools.map((tool) =>
+                    tool.id === action.activity.id ? action.activity : tool,
+                  ),
+          }
+        }),
+      }
     case 'finishMessage':
       return {
         ...state,
         messages: state.messages.map((message) =>
-          message.id === action.id ? { ...message, pending: false } : message,
+          message.id === action.id
+            ? { ...message, pending: false, cutOff: action.cutOff }
+            : message,
         ),
       }
     case 'setGenerating':
@@ -155,8 +202,16 @@ interface AppContextValue {
 const AppContext = createContext<AppContextValue | null>(null)
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialState)
+  const [state, dispatch] = useReducer(reducer, undefined, createInitialState)
   const value = useMemo(() => ({ state, dispatch }), [state])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(state.messages))
+    } catch {
+      // Chat remains available for this tab when browser storage is unavailable or full.
+    }
+  }, [state.messages])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }

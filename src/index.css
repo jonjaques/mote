@@ -424,6 +424,66 @@
   white-space: pre-wrap;
 }
 
+.tool-call {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.55rem;
+  margin: 0.45rem 0;
+  padding: 0.55rem;
+  color: var(--muted-foreground);
+  border: 1px solid var(--border);
+  background: color-mix(in oklch, var(--panel-raised), transparent 20%);
+}
+
+.tool-call > svg {
+  width: 0.8rem;
+  height: 0.8rem;
+  margin-top: 0.1rem;
+  color: var(--cyan-dim);
+}
+
+.tool-call > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.15rem;
+}
+
+.tool-call strong,
+.tool-call code,
+.tool-call small {
+  overflow: hidden;
+  font-size: 0.65rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-call strong {
+  color: var(--foreground);
+  font-weight: 650;
+}
+
+.tool-call code,
+.tool-call small {
+  color: var(--muted-foreground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.tool-complete {
+  border-color: color-mix(in oklch, var(--primary), transparent 65%);
+}
+
+.tool-error,
+.tool-error > svg {
+  color: oklch(0.73 0.16 28);
+  border-color: color-mix(in oklch, var(--destructive), transparent 55%);
+}
+
+.continue-button {
+  margin-top: 0.75rem;
+}
+
 .composer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -834,14 +894,33 @@
 
   .workspace-bar {
     min-height: 3.5rem;
+    flex-wrap: wrap;
+    padding-block: 0.5rem;
+  }
+
+  .workspace-bar nav {
+    width: 100%;
+    min-height: 2.5rem;
+  }
+
+  .workspace-actions {
+    width: 100%;
+    justify-content: flex-end;
+    padding-top: 0.4rem;
+    border-top: 1px solid var(--border);
   }
 
   .workspace-tab {
+    flex: 1;
     padding-inline: 0.45rem;
   }
 
   .workspace-tab.is-active::after {
     right: 0.45rem;
     left: 0.45rem;
+  }
+
+  .files-view {
+    grid-template-columns: 8.5rem minmax(0, 1fr);
   }
 }

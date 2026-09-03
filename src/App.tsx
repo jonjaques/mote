@@ -18,6 +18,7 @@ declare global {
       model?: string
       progress?: number
       error?: string
+      generating?: boolean
     }
   }
 }
@@ -60,8 +61,8 @@ function MoteApp() {
         const params = new URLSearchParams(window.location.search)
         const requestedId = params.get('model') ?? FAST_MODEL_ID
         const requestedModel =
-          models.find((model) => model.id === requestedId) ??
           models.find((model) => model.baseId === requestedId && model.source === 'local') ??
+          models.find((model) => model.id === requestedId) ??
           models.find((model) => model.baseId === requestedId) ??
           models[0]
 
@@ -93,6 +94,13 @@ function MoteApp() {
     autoloaded.current = true
     void loadSelectedModel()
   }, [loadSelectedModel, state.models.length])
+
+  useEffect(() => {
+    window.__llmcoder = {
+      ...window.__llmcoder,
+      generating: state.generating,
+    }
+  }, [state.generating])
 
   async function deleteSelectedModel() {
     const selected = state.models.find((model) => model.id === state.model.selectedId)

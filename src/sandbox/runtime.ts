@@ -7,7 +7,7 @@ export interface SandboxConsoleEntry {
   timestamp: number
 }
 
-interface SandboxResponse {
+export interface SandboxResponse {
   type: 'mote:response'
   id: string
   ok: boolean
@@ -138,6 +138,7 @@ export class SandboxBridge {
   private readyListeners = new Set<(ready: boolean) => void>()
   private ready = false
   private requestSequence = 0
+  private documentRevision = 0
 
   constructor() {
     window.addEventListener('message', this.onMessage)
@@ -145,6 +146,7 @@ export class SandboxBridge {
 
   attach(frameWindow: Window | null): void {
     this.frameWindow = frameWindow
+    this.documentRevision += 1
     this.ready = false
     this.consoleEntries = []
     this.emitConsole()
@@ -178,6 +180,27 @@ export class SandboxBridge {
 
   async getDom(maxChars?: number): Promise<SandboxResponse> {
     return this.request({ type: 'mote:dom', maxChars })
+  }
+
+  getDocumentRevision(): number {
+    return this.documentRevision
+  }
+
+  waitForReloadAfter(revision: number, timeoutMs = 2_000): Promise<void> {
+    if (this.documentRevision > revision && this.ready) return Promise.resolve()
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        unsubscribe()
+        reject(new Error('Sandbox did not become ready after the file update.'))
+      }, timeoutMs)
+      const unsubscribe = this.subscribeReady((ready) => {
+        if (!ready || this.documentRevision <= revision) return
+        clearTimeout(timer)
+        unsubscribe()
+        resolve()
+      })
+    })
   }
 
   private request(payload: { type: 'mote:run'; code: string } | { type: 'mote:dom'; maxChars?: number }): Promise<SandboxResponse> {

@@ -16,9 +16,9 @@ function assembleDocument(): string {
   const app = escapeClosingTag(projectFS.read('app.js'), 'script')
   const headInjection = [
     `<meta http-equiv="Content-Security-Policy" content="${CSP}">`,
-    `<style data-mote-file="styles.css">${styles}</style>`,
     `<script data-mote-runtime>${escapeClosingTag(SANDBOX_RUNTIME, 'script')}</script>`,
   ].join('\n')
+  const styleTag = `<style data-mote-file="styles.css">${styles}</style>`
   const appScript = `<script data-mote-file="app.js">${app}</script>`
 
   if (/<head(?:\s[^>]*)?>/i.test(html)) {
@@ -27,10 +27,14 @@ function assembleDocument(): string {
     html = `<head>${headInjection}</head>\n${html}`
   }
 
-  if (/<\/body>/i.test(html)) {
-    return html.replace(/<\/body>/i, `${appScript}\n</body>`)
-  }
-  return `${html}\n${appScript}`
+  html = html.replace(
+    /<link\b[^>]*href=["'](?:\.\/)?styles\.css["'][^>]*>/i,
+    styleTag,
+  )
+  return html.replace(
+    /<script\b[^>]*src=["'](?:\.\/)?app\.js["'][^>]*>\s*<\/script>/i,
+    appScript,
+  )
 }
 
 export function Sandbox() {

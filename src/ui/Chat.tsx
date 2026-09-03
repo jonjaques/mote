@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { ArrowUp, LoaderCircle, Square } from 'lucide-react'
+import { ArrowRight, ArrowUp, LoaderCircle, Square } from 'lucide-react'
 import type { ChatCompletionMessageParam } from '@mlc-ai/web-llm'
 
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { interruptGeneration, prepareEngine } from '@/llm/engine'
+import { runAgent } from '@/llm/agent'
+import { interruptGeneration } from '@/llm/engine'
 import { useAppState, type ChatMessage } from '@/state'
+import { ToolCallCard } from './ToolCallCard'
 
 function makeId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -27,10 +29,8 @@ export function Chat() {
     })
   }, [state.messages, state.generating])
 
-  async function sendMessage(event?: FormEvent) {
-    event?.preventDefault()
-    const content = input.trim()
-    if (!content || !canSend) return
+  async function runInput(content: string) {
+    if (!content || state.model.phase !== 'ready' || state.generating) return
 
     const userMessage: ChatMessage = { id: makeId('user'), role: 'user', content }
     const assistantId = makeId('assistant')
@@ -50,27 +50,38 @@ export function Chat() {
     dispatch({ type: 'setGenerating', value: true })
 
     try {
-      const { engine } = await prepareEngine()
-      const stream = await engine.chat.completions.create({
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You are Mote, a concise coding assistant running entirely in the browser. Explain code clearly and keep answers brief.',
-          },
-          ...history,
-        ],
-        stream: true,
-        temperature: 0.2,
-        max_tokens: 1_024,
-        extra_body: { enable_thinking: false },
+      const result = await runAgent(content, history.slice(0, -1), {
+        onText: (reply) => {
+          dispatch({ type: 'streamMessage', id: assistantId, content: reply })
+        },
+        onTool: (activity) => {
+          const content = activity.call.arguments.content
+          dispatch({
+            type: 'toolActivity',
+            messageId: assistantId,
+            activity: {
+              ...activity,
+              call: {
+                ...activity.call,
+                arguments: {
+                  ...activity.call.arguments,
+                  ...(typeof content === 'string'
+                    ? { content: `[${content.length} characters]` }
+                    : {}),
+                },
+              },
+            },
+          })
+        },
       })
-
-      let reply = ''
-      for await (const chunk of stream) {
-        reply += chunk.choices[0]?.delta.content ?? ''
-        dispatch({ type: 'streamMessage', id: assistantId, content: reply })
+      if (!result.content) {
+        dispatch({
+          type: 'streamMessage',
+          id: assistantId,
+          content: 'The requested tool work completed.',
+        })
       }
+      dispatch({ type: 'finishMessage', id: assistantId, cutOff: result.cutOff })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       dispatch({
@@ -78,10 +89,17 @@ export function Chat() {
         id: assistantId,
         content: `Generation failed: ${message}`,
       })
-    } finally {
       dispatch({ type: 'finishMessage', id: assistantId })
+    } finally {
       dispatch({ type: 'setGenerating', value: false })
     }
+  }
+
+  async function sendMessage(event?: FormEvent) {
+    event?.preventDefault()
+    const content = input.trim()
+    if (!content || !canSend) return
+    await runInput(content)
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -116,7 +134,23 @@ export function Chat() {
           state.messages.map((message) => (
             <article key={message.id} className={`message message-${message.role}`}>
               <span>{message.role === 'user' ? 'You' : 'Mote'}</span>
+              {message.tools?.map((activity) => (
+                <ToolCallCard key={activity.id} activity={activity} />
+              ))}
               <p>{message.content || (message.pending ? 'Thinking…' : '')}</p>
+              {message.cutOff && !state.generating && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="continue-button"
+                  onClick={() =>
+                    void runInput('Continue from the cut-off response and finish the requested work.')
+                  }
+                >
+                  Continue
+                  <ArrowRight />
+                </Button>
+              )}
             </article>
           ))
         )}

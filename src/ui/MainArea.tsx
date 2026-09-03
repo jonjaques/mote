@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react'
-import { Code2, FlaskConical, Monitor, RotateCcw, TerminalSquare } from 'lucide-react'
+import {
+  Code2,
+  Download,
+  FlaskConical,
+  LoaderCircle,
+  Monitor,
+  RotateCcw,
+  TerminalSquare,
+} from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { exportProject } from '@/sandbox/export'
 import { projectFS } from '@/sandbox/fs'
 import { Sandbox } from '@/sandbox/Sandbox'
 import { sandboxBridge } from '@/sandbox/runtime'
@@ -11,8 +20,18 @@ import { FilesView } from './FilesView'
 export function MainArea() {
   const [activeView, setActiveView] = useState<'preview' | 'files' | 'console'>('preview')
   const [sandboxReady, setSandboxReady] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => sandboxBridge.subscribeReady(setSandboxReady), [])
+
+  async function downloadProject() {
+    setExporting(true)
+    try {
+      await exportProject()
+    } finally {
+      setExporting(false)
+    }
+  }
 
   return (
     <main className="main-area">
@@ -41,6 +60,15 @@ export function MainArea() {
           </button>
         </nav>
         <div className="workspace-actions">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void downloadProject()}
+            disabled={exporting}
+          >
+            {exporting ? <LoaderCircle className="animate-spin" /> : <Download />}
+            Export
+          </Button>
           {import.meta.env.DEV && (
             <Button variant="ghost" size="sm" onClick={() => projectFS.seed()}>
               <FlaskConical />

@@ -7,6 +7,7 @@ export interface ProjectFile {
 }
 
 const encoder = new TextEncoder()
+const STORAGE_KEY = 'mote:project:v1'
 
 const starterFiles: Record<string, string> = {
   'index.html': `<!doctype html>
@@ -15,6 +16,7 @@ const starterFiles: Record<string, string> = {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Mote project</title>
+    <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main>
@@ -22,6 +24,7 @@ const starterFiles: Record<string, string> = {
       <h1>Your tiny world is ready.</h1>
       <p>Ask Mote to build something, or edit the files directly through its tools.</p>
     </main>
+    <script src="app.js"></script>
   </body>
 </html>`,
   'styles.css': `:root {
@@ -73,6 +76,7 @@ const seedFiles: Record<string, string> = {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Signal Garden</title>
+    <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main>
@@ -81,6 +85,7 @@ const seedFiles: Record<string, string> = {
       <button id="pulse">Send a pulse</button>
       <output id="reading">System quiet</output>
     </main>
+    <script src="app.js"></script>
   </body>
 </html>`,
   'styles.css': `:root { color: #e8f5e9; background: #102318; font-family: ui-monospace, monospace; }
@@ -109,7 +114,7 @@ function normalizePath(path: string): string {
 }
 
 export class VirtualFileSystem {
-  private files = new Map<string, string>(Object.entries(starterFiles))
+  private files = this.load()
   private listeners = new Set<() => void>()
   private revision = 0
 
@@ -152,7 +157,29 @@ export class VirtualFileSystem {
 
   private notify(): void {
     this.revision += 1
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(Object.fromEntries(this.files)))
+    } catch {
+      // A working in-memory sandbox is more useful than rejecting edits when storage is full.
+    }
     for (const listener of this.listeners) listener()
+  }
+
+  private load(): Map<string, string> {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      if (!saved) return new Map(Object.entries(starterFiles))
+      const parsed: unknown = JSON.parse(saved)
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return new Map(Object.entries(starterFiles))
+      }
+      const entries = Object.entries(parsed).filter(
+        (entry): entry is [string, string] => typeof entry[1] === 'string',
+      )
+      return entries.length ? new Map(entries) : new Map(Object.entries(starterFiles))
+    } catch {
+      return new Map(Object.entries(starterFiles))
+    }
   }
 }
 

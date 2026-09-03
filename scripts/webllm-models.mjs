@@ -6,8 +6,8 @@
 //   compiled WebGPU kernels        https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/<modelVersion>/<lib>.wasm
 // and stores them in the browser Cache API under "webllm/model", "webllm/config" and
 // "webllm/wasm" (verified against chat.webllm.ai — see PLAN.md, "How chat.webllm.ai serves
-// models"). The file list is NOT discoverable from a repo listing: WebLLM reads
-// ndarray-cache.json for the shard names and mlc-chat-config.json for the tokenizer files,
+// models"). The file list is NOT discoverable from a repo listing: WebLLM 0.2.84 reads
+// tensor-cache.json for the shard names and mlc-chat-config.json for the tokenizer files,
 // so this script does exactly the same, which keeps it correct for any MLC-converted repo.
 //
 // Usage
@@ -132,17 +132,20 @@ function resolveRecord(spec, modelLibOverride) {
 async function buildManifest(record) {
   const base = cleanModelUrl(record.model);
   const config = await fetchJson(base + "mlc-chat-config.json");
-  const ndarray = await fetchJson(base + "ndarray-cache.json");
+  const tensorCache = await fetchJson(base + "tensor-cache.json");
   const files = [
     { path: "mlc-chat-config.json", url: base + "mlc-chat-config.json" },
+    { path: "tensor-cache.json", url: base + "tensor-cache.json" },
+    // MLC tooling still refers to the same manifest by its older name. Keeping both names
+    // costs only tens of kilobytes and makes the mirror useful outside the browser too.
     { path: "ndarray-cache.json", url: base + "ndarray-cache.json" },
     // WebLLM only loads tokenizer.json (falling back to tokenizer.model); mirroring every
     // file the config lists costs a few MB and keeps the mirror usable by mlc_llm too.
     ...(config.tokenizer_files ?? []).map((f) => ({ path: f, url: base + f })),
-    ...ndarray.records.map((r) => ({ path: r.dataPath, url: base + r.dataPath, bytes: r.nbytes })),
+    ...tensorCache.records.map((r) => ({ path: r.dataPath, url: base + r.dataPath, bytes: r.nbytes })),
   ];
   const wasm = { path: path.basename(record.model_lib), url: record.model_lib };
-  const shardBytes = ndarray.records.reduce((n, r) => n + r.nbytes, 0);
+  const shardBytes = tensorCache.records.reduce((n, r) => n + r.nbytes, 0);
   return { record, base, config, files, wasm, shardBytes };
 }
 
