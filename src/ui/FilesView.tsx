@@ -1,7 +1,7 @@
 import { useState, useSyncExternalStore } from 'react'
 import { Braces, FileCode2, FileText } from 'lucide-react'
 
-import { projectFS } from '@/sandbox/fs'
+import { listProjectFiles, projectFS } from '@/sandbox/fs'
 
 function fileIcon(path: string) {
   if (path.endsWith('.js')) return <Braces />
@@ -10,17 +10,19 @@ function fileIcon(path: string) {
 }
 
 export function FilesView() {
-  const revision = useSyncExternalStore(
+  // Derive the tree from the store snapshot so the React Compiler re-runs this on every
+  // revision; a bare projectFS.list() in render has no reactive input and is memoised once.
+  const snapshot = useSyncExternalStore(
     projectFS.subscribe,
-    projectFS.getRevision,
-    projectFS.getRevision,
+    projectFS.getSnapshot,
+    projectFS.getSnapshot,
   )
-  const files = projectFS.list()
+  const files = listProjectFiles(snapshot.files)
   const [selectedPath, setSelectedPath] = useState('index.html')
   const selected = files.find((file) => file.path === selectedPath) ?? files[0]
 
   return (
-    <div className="files-view" data-revision={revision}>
+    <div className="files-view" data-revision={snapshot.revision}>
       <aside className="file-tree" aria-label="Project files">
         <div className="file-tree-heading">
           <span>Project</span>

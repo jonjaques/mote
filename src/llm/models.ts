@@ -7,7 +7,16 @@ import {
 
 export const FAST_MODEL_ID = 'Qwen3-0.6B-q4f16_1-MLC'
 export const SMART_MODEL_ID = 'Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC'
+export const STEP_UP_MODEL_ID = 'Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC'
 export const LOCAL_SUFFIX = ' (local)'
+
+// Models expected to build whole pages; the agent applies its two-file stylesheet guard to
+// these only, because the fast model rewrites index.html wholesale and never links styles.css.
+export const PAGE_BUILDER_MODEL_IDS = [SMART_MODEL_ID, STEP_UP_MODEL_ID]
+
+export function isPageBuilderModel(loadedIds: string[] | undefined): boolean {
+  return loadedIds?.some((id) => PAGE_BUILDER_MODEL_IDS.some((base) => id.startsWith(base))) ?? false
+}
 
 const VRAM_BUDGET_MB = 6_144
 
@@ -26,13 +35,15 @@ const curatedModels: Record<string, { label: string; contextWindow?: number }> =
   [SMART_MODEL_ID]: { label: 'Qwen2.5 Coder 1.5B · Smart', contextWindow: 8_192 },
   'Llama-3.2-1B-Instruct-q4f16_1-MLC': { label: 'Llama 3.2 1B · Alternate' },
   'Qwen2.5-Coder-3B-Instruct-q4f16_1-MLC': { label: 'Qwen2.5 Coder 3B · Step up' },
-  'Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC': { label: 'Qwen2.5 Coder 7B · Page builder' },
+  [STEP_UP_MODEL_ID]: { label: 'Qwen2.5 Coder 7B · Page builder', contextWindow: 8_192 },
   'Qwen3-8B-q4f16_1-MLC': { label: 'Qwen3 8B · Reasoning' },
   'Qwen3.5-9B-q4f16_1-MLC': { label: 'Qwen3.5 9B · Largest' },
 }
 
-function withOverrides(record: ModelRecord): ModelRecord {
-  const contextWindow = curatedModels[record.model_id]?.contextWindow
+// `baseId` is the curated key; local records carry the ` (local)` suffix in `model_id` and
+// would otherwise never match, leaving the mirror at the prebuilt 4096 context.
+function withOverrides(record: ModelRecord, baseId = record.model_id): ModelRecord {
+  const contextWindow = curatedModels[baseId]?.contextWindow
   if (!contextWindow) return record
 
   return {
@@ -83,14 +94,17 @@ async function loadLocalRecords(): Promise<ModelRecord[]> {
 
     return records.filter(isModelRecord).map((record) => {
       const baseId = record.model_id
-      return withOverrides({
-        ...record,
-        // WebLLM's cleanModelUrl appends resolve/main/ to any URL that lacks it.
-        // Put that segment in the record so cache keys and on-disk paths stay aligned.
-        model: toAbsoluteModelUrl(record.model),
-        model_id: `${baseId}${LOCAL_SUFFIX}`,
-        model_lib: new URL(record.model_lib, window.location.origin).href,
-      })
+      return withOverrides(
+        {
+          ...record,
+          // WebLLM's cleanModelUrl appends resolve/main/ to any URL that lacks it.
+          // Put that segment in the record so cache keys and on-disk paths stay aligned.
+          model: toAbsoluteModelUrl(record.model),
+          model_id: `${baseId}${LOCAL_SUFFIX}`,
+          model_lib: new URL(record.model_lib, window.location.origin).href,
+        },
+        baseId,
+      )
     })
   } catch {
     // Production intentionally has no model mirror unless one is mounted separately.
@@ -104,7 +118,7 @@ export async function createModelCatalog(): Promise<{
 }> {
   const remoteRecords = prebuiltAppConfig.model_list
     .filter((record) => record.model_id in curatedModels)
-    .map(withOverrides)
+    .map((record) => withOverrides(record))
   const localRecords = await loadLocalRecords()
   const localBaseIds = new Set(localRecords.map((record) => record.model_id.slice(0, -LOCAL_SUFFIX.length)))
 

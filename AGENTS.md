@@ -48,7 +48,8 @@ pnpm cdp:trace --url "http://localhost:5173/?model=Qwen3-0.6B-q4f16_1-MLC&autolo
 | `src/llm/prompts.ts` | system prompts |
 | `src/sandbox/fs.ts` | virtual filesystem singleton |
 | `src/sandbox/runtime.ts` | host/iframe bridge, inlined runtime |
-| `src/sandbox/Sandbox.tsx` | `srcdoc` assembly + iframe |
+| `src/sandbox/document.ts` | `srcdoc` assembly |
+| `src/sandbox/Sandbox.tsx` | the keyed iframe + bridge attach |
 | `src/state.tsx` | the only React store (one reducer + context) |
 | `src/ui/*` | views; they subscribe to the singletons above |
 
@@ -59,6 +60,13 @@ Do not introduce a store library. Do not duplicate file or console state in Reac
 - Keep the engine **out of React state**. Strict Mode remounts effects and the
   React Compiler treats state as immutable; a live engine is neither. Guard
   one-shot effects with a module-level or `useRef` flag.
+- Never read `projectFS` or `sandboxBridge` directly inside render or a
+  `useMemo` callback. The compiler memoises by reactive inputs; a callback with
+  none runs once and the preview silently freezes on the first document. Subscribe
+  with `useSyncExternalStore(projectFS.subscribe, projectFS.getSnapshot)` and
+  derive from the snapshot (`assembleDocument(snapshot.files)`,
+  `listProjectFiles(snapshot.files)`). `pnpm cdp:agent` catches this: every
+  trial then reports the same probe values.
 - Construct the worker with this literal shape so Vite can split it:
 
   `new Worker(new URL("./worker.ts", import.meta.url), { type: "module" })`

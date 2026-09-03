@@ -6,6 +6,21 @@ export interface ProjectFile {
   bytes: number
 }
 
+// What React subscribes to. A new frozen object per revision so that anything derived from
+// it in render (the srcdoc, the file tree) has a reactive input the React Compiler can see.
+// Reading the singleton directly inside render or useMemo is memoised away by the compiler
+// and the preview silently stops updating.
+export interface ProjectSnapshot {
+  revision: number
+  files: Readonly<Record<string, string>>
+}
+
+export function listProjectFiles(files: Readonly<Record<string, string>>): ProjectFile[] {
+  return Object.entries(files)
+    .map(([path, content]) => ({ path, content, bytes: encoder.encode(content).byteLength }))
+    .sort((a, b) => a.path.localeCompare(b.path))
+}
+
 const encoder = new TextEncoder()
 const STORAGE_KEY = 'mote:project:v1'
 
@@ -105,7 +120,7 @@ button?.addEventListener("click", () => {
 });`,
 }
 
-function normalizePath(path: string): string {
+export function normalizeProjectPath(path: string): string {
   const normalized = path.trim().replaceAll('\\', '/').replace(/^\.?\//, '')
   if (!normalized || normalized.includes('..') || normalized.startsWith('/')) {
     throw new Error(`Invalid project path: ${path}`)
@@ -117,8 +132,11 @@ export class VirtualFileSystem {
   private files = this.load()
   private listeners = new Set<() => void>()
   private revision = 0
+  private snapshot: ProjectSnapshot = this.takeSnapshot()
 
   getRevision = (): number => this.revision
+
+  getSnapshot = (): ProjectSnapshot => this.snapshot
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener)
@@ -126,20 +144,31 @@ export class VirtualFileSystem {
   }
 
   list(): ProjectFile[] {
-    return [...this.files.entries()]
-      .map(([path, content]) => ({ path, content, bytes: encoder.encode(content).byteLength }))
-      .sort((a, b) => a.path.localeCompare(b.path))
+    return listProjectFiles(this.snapshot.files)
   }
 
   read(path: string): string {
-    const normalized = normalizePath(path)
+    const normalized = normalizeProjectPath(path)
     const content = this.files.get(normalized)
     if (content === undefined) throw new Error(`File not found: ${normalized}`)
     return content
   }
 
+  // True when the file is absent or still carries starter or seed content, i.e. nothing a
+  // model could need to preserve. The write_file tool uses this to exempt a fresh build from
+  // its read-before-overwrite rule.
+  isPristine(path: string): boolean {
+    const normalized = normalizeProjectPath(path)
+    const content = this.files.get(normalized)
+    return (
+      content === undefined ||
+      content === starterFiles[normalized] ||
+      content === seedFiles[normalized]
+    )
+  }
+
   write(path: string, content: string): number {
-    const normalized = normalizePath(path)
+    const normalized = normalizeProjectPath(path)
     this.files.set(normalized, content)
     this.notify()
     return encoder.encode(content).byteLength
@@ -155,8 +184,16 @@ export class VirtualFileSystem {
     this.notify()
   }
 
+  private takeSnapshot(): ProjectSnapshot {
+    return Object.freeze({
+      revision: this.revision,
+      files: Object.freeze(Object.fromEntries(this.files)),
+    })
+  }
+
   private notify(): void {
     this.revision += 1
+    this.snapshot = this.takeSnapshot()
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(Object.fromEntries(this.files)))
     } catch {

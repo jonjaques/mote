@@ -88,4 +88,12 @@ export default defineConfig({
       '@': path.resolve(import.meta.dirname, './src'),
     },
   },
+  server: {
+    watch: {
+      // The CDP harness keeps its Chrome profile inside the repo and Chrome writes to it
+      // constantly; without this, every write is a full page reload in the middle of a run.
+      // The model mirror is multi-GB and never imported.
+      ignored: ['**/.cdp-profile/**', '**/models/**'],
+    },
+  },
 })

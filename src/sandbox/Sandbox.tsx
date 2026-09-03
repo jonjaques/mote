@@ -1,57 +1,35 @@
-import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
+import { useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react'
 
+import { assembleDocument } from './document'
 import { projectFS } from './fs'
-import { SANDBOX_RUNTIME, sandboxBridge } from './runtime'
-
-const CSP =
-  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https:; img-src https: data:; font-src https:; connect-src 'none'; frame-src 'none'"
-
-function escapeClosingTag(content: string, tag: string): string {
-  return content.replace(new RegExp(`</${tag}`, 'gi'), `<\\/${tag}`)
-}
-
-function assembleDocument(): string {
-  let html = projectFS.read('index.html')
-  const styles = escapeClosingTag(projectFS.read('styles.css'), 'style')
-  const app = escapeClosingTag(projectFS.read('app.js'), 'script')
-  const headInjection = [
-    `<meta http-equiv="Content-Security-Policy" content="${CSP}">`,
-    `<script data-mote-runtime>${escapeClosingTag(SANDBOX_RUNTIME, 'script')}</script>`,
-  ].join('\n')
-  const styleTag = `<style data-mote-file="styles.css">${styles}</style>`
-  const appScript = `<script data-mote-file="app.js">${app}</script>`
-
-  if (/<head(?:\s[^>]*)?>/i.test(html)) {
-    html = html.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}\n${headInjection}`)
-  } else {
-    html = `<head>${headInjection}</head>\n${html}`
-  }
-
-  html = html.replace(
-    /<link\b[^>]*href=["'](?:\.\/)?styles\.css["'][^>]*>/i,
-    styleTag,
-  )
-  return html.replace(
-    /<script\b[^>]*src=["'](?:\.\/)?app\.js["'][^>]*>\s*<\/script>/i,
-    appScript,
-  )
-}
+import { sandboxBridge } from './runtime'
 
 export function Sandbox() {
-  const revision = useSyncExternalStore(
+  // The snapshot, not the singleton, is the input: the React Compiler memoises render-time
+  // work by its reactive inputs, and a callback that reads projectFS directly has none, so
+  // the srcdoc would be computed once and never again.
+  const snapshot = useSyncExternalStore(
     projectFS.subscribe,
-    projectFS.getRevision,
-    projectFS.getRevision,
+    projectFS.getSnapshot,
+    projectFS.getSnapshot,
   )
+  const revision = snapshot.revision
   const iframeRef = useRef<HTMLIFrameElement>(null)
-  const srcDoc = useMemo(assembleDocument, [revision])
+  const srcDoc = useMemo(() => assembleDocument(snapshot.files), [snapshot.files])
 
-  useEffect(() => {
+  // Attach before the browser can run the new document: the runtime posts `ready` as its first
+  // statement, and a message from a window the bridge is not yet watching is dropped.
+  useLayoutEffect(() => {
     sandboxBridge.attach(iframeRef.current?.contentWindow ?? null)
   }, [revision])
 
+  // Keyed on the revision so every write is a real navigation. Resetting an already-reset
+  // project, or a model rewriting a file with identical content, yields the same srcdoc string;
+  // React would leave the attribute alone, the iframe would never reload, and the bridge would
+  // wait forever for a `ready` signal.
   return (
     <iframe
+      key={revision}
       ref={iframeRef}
       className="sandbox-frame"
       title="Mote project preview"
