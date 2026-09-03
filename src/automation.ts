@@ -1,4 +1,4 @@
-import type { AgentToolActivity } from '@/llm/agent'
+import type { AgentStats, AgentToolActivity } from '@/llm/agent'
 import { interruptGeneration } from '@/llm/engine'
 import { projectFS } from '@/sandbox/fs'
 import { sandboxBridge, type SandboxConsoleEntry, type SandboxResponse } from '@/sandbox/runtime'
@@ -19,9 +19,11 @@ export interface AutomationStatus {
 export interface AutomationRun {
   content: string
   cutOff: boolean
+  stopped: boolean
   rounds: number
   seconds: number
   tools: AgentToolActivity[]
+  stats?: AgentStats
   error?: string
 }
 

@@ -5,7 +5,7 @@ import { SANDBOX_RUNTIME } from './runtime'
 // without it every run_js call fails with an EvalError. It grants nothing the page cannot
 // already do through inline scripts. connect-src 'none' is the load-bearing restriction.
 const CSP =
-  "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline' https:; img-src https: data:; font-src https:; connect-src 'none'; frame-src 'none'"
+  "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline' https:; img-src https: data:; font-src https:; connect-src 'none'; frame-src 'none'; form-action 'none'"
 
 function escapeClosingTag(content: string, tag: string): string {
   return content.replace(new RegExp(`</${tag}`, 'gi'), `<\\/${tag}`)

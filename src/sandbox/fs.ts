@@ -179,6 +179,11 @@ export class VirtualFileSystem {
     this.notify()
   }
 
+  // A new revision with unchanged files: the keyed iframe remounts and page state resets.
+  touch(): void {
+    this.notify()
+  }
+
   seed(): void {
     this.files = new Map(Object.entries(seedFiles))
     this.notify()

@@ -90,8 +90,10 @@ Do not introduce a store library. Do not duplicate file or console state in Reac
 
 ## Sandbox boundary
 
-- `<iframe sandbox="allow-scripts">` **without** `allow-same-origin`. The model's
-  code must stay unable to touch the host document, storage, or model cache.
+- `<iframe sandbox="allow-scripts allow-forms">` **without** `allow-same-origin`.
+  The model's code must stay unable to touch the host document, storage, or model
+  cache. `allow-forms` exists only so `submit` events fire; the CSP's
+  `form-action 'none'` blocks the navigation and the runtime reports the submit.
 - The iframe posts to `"*"` because its origin is opaque. The host accepts a
   message only when `event.source === iframe.contentWindow`.
 - Keep the restrictive CSP in assembled `srcdoc`. Inline script and style are

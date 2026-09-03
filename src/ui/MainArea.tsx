@@ -5,7 +5,9 @@ import {
   FlaskConical,
   LoaderCircle,
   Monitor,
+  RefreshCw,
   RotateCcw,
+  Smartphone,
   TerminalSquare,
 } from 'lucide-react'
 
@@ -13,16 +15,35 @@ import { Button } from '@/components/ui/button'
 import { exportProject } from '@/sandbox/export'
 import { projectFS } from '@/sandbox/fs'
 import { Sandbox } from '@/sandbox/Sandbox'
-import { sandboxBridge } from '@/sandbox/runtime'
+import { sandboxBridge, type SandboxConsoleEntry } from '@/sandbox/runtime'
+import { useAppState, type WorkspaceView } from '@/state'
 import { ConsoleView } from './ConsoleView'
 import { FilesView } from './FilesView'
 
+const VIEWS: Array<{ id: WorkspaceView; label: string; icon: typeof Monitor }> = [
+  { id: 'preview', label: 'Preview', icon: Monitor },
+  { id: 'files', label: 'Files', icon: Code2 },
+  { id: 'console', label: 'Console', icon: TerminalSquare },
+]
+
 export function MainArea() {
-  const [activeView, setActiveView] = useState<'preview' | 'files' | 'console'>('preview')
+  const { state, dispatch } = useAppState()
+  const { view, previewWidth } = state.workspace
   const [sandboxReady, setSandboxReady] = useState(false)
+  const [consoleEntries, setConsoleEntries] = useState<SandboxConsoleEntry[]>([])
   const [exporting, setExporting] = useState(false)
+  const [confirmReset, setConfirmReset] = useState(false)
 
   useEffect(() => sandboxBridge.subscribeReady(setSandboxReady), [])
+  useEffect(() => sandboxBridge.subscribeConsole(setConsoleEntries), [])
+  useEffect(() => {
+    if (!confirmReset) return
+    const timer = setTimeout(() => setConfirmReset(false), 4_000)
+    return () => clearTimeout(timer)
+  }, [confirmReset])
+
+  const errorCount = consoleEntries.filter((entry) => entry.level === 'error').length
+  const fileCount = projectFS.list().length
 
   async function downloadProject() {
     setExporting(true)
@@ -33,38 +54,77 @@ export function MainArea() {
     }
   }
 
+  function resetProject() {
+    if (!confirmReset) {
+      setConfirmReset(true)
+      return
+    }
+    setConfirmReset(false)
+    projectFS.reset()
+    dispatch({ type: 'openFile', path: 'index.html' })
+    dispatch({ type: 'setView', view: 'preview' })
+  }
+
   return (
     <main className="main-area">
       <header className="workspace-bar">
         <nav aria-label="Workspace views">
-          <button
-            className={`workspace-tab ${activeView === 'preview' ? 'is-active' : ''}`}
-            type="button"
-            onClick={() => setActiveView('preview')}
-          >
-            <Monitor /> Preview
-          </button>
-          <button
-            className={`workspace-tab ${activeView === 'files' ? 'is-active' : ''}`}
-            type="button"
-            onClick={() => setActiveView('files')}
-          >
-            <Code2 /> Files
-          </button>
-          <button
-            className={`workspace-tab ${activeView === 'console' ? 'is-active' : ''}`}
-            type="button"
-            onClick={() => setActiveView('console')}
-          >
-            <TerminalSquare /> Console
-          </button>
+          {VIEWS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              className={`workspace-tab ${view === id ? 'is-active' : ''}`}
+              type="button"
+              aria-current={view === id ? 'page' : undefined}
+              onClick={() => dispatch({ type: 'setView', view: id })}
+            >
+              <Icon /> {label}
+              {id === 'console' && errorCount > 0 && (
+                <span className="tab-badge tab-badge-error" aria-label={`${errorCount} errors`}>
+                  {errorCount}
+                </span>
+              )}
+              {id === 'files' && <span className="tab-badge">{fileCount}</span>}
+            </button>
+          ))}
         </nav>
         <div className="workspace-actions">
+          {view === 'preview' && (
+            <div className="segmented" role="group" aria-label="Preview width">
+              <button
+                type="button"
+                className={previewWidth === 'desktop' ? 'is-active' : ''}
+                aria-pressed={previewWidth === 'desktop'}
+                title="Desktop width"
+                onClick={() => dispatch({ type: 'setPreviewWidth', width: 'desktop' })}
+              >
+                <Monitor />
+              </button>
+              <button
+                type="button"
+                className={previewWidth === 'mobile' ? 'is-active' : ''}
+                aria-pressed={previewWidth === 'mobile'}
+                title="Phone width (390px)"
+                onClick={() => dispatch({ type: 'setPreviewWidth', width: 'mobile' })}
+              >
+                <Smartphone />
+              </button>
+            </div>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => projectFS.touch()}
+            title="Reload the preview and reset its state"
+          >
+            <RefreshCw />
+            Reload
+          </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => void downloadProject()}
             disabled={exporting}
+            title="Download the project as a zip"
           >
             {exporting ? <LoaderCircle className="animate-spin" /> : <Download />}
             Export
@@ -75,29 +135,44 @@ export function MainArea() {
               Seed example
             </Button>
           )}
-          <Button variant="ghost" size="sm" onClick={() => projectFS.reset()}>
+          <Button
+            variant={confirmReset ? 'destructive' : 'ghost'}
+            size="sm"
+            onClick={resetProject}
+            onBlur={() => setConfirmReset(false)}
+            title="Replace every file with the starter project"
+          >
             <RotateCcw />
-            Reset
+            {confirmReset ? 'Replace all files?' : 'Reset'}
           </Button>
         </div>
       </header>
       <section className="workspace-surface">
-        <div className={activeView === 'preview' ? 'view-panel is-active' : 'view-panel'}>
+        <div
+          className={`view-panel preview-panel ${view === 'preview' ? 'is-active' : ''} ${previewWidth === 'mobile' ? 'is-mobile' : ''}`}
+        >
           <Sandbox />
         </div>
-        {activeView === 'files' && (
+        {view === 'files' && (
           <div className="view-panel is-active">
             <FilesView />
           </div>
         )}
-        {activeView === 'console' && (
+        {view === 'console' && (
           <div className="view-panel is-active">
             <ConsoleView />
           </div>
         )}
       </section>
       <footer className="workspace-status">
-        <span><i className={`status-dot ${sandboxReady ? 'is-ready' : ''}`} /> {sandboxReady ? 'Sandbox ready' : 'Sandbox starting'}</span>
+        <span>
+          <i className={`status-dot ${sandboxReady ? 'is-ready' : ''}`} />{' '}
+          {sandboxReady ? 'Sandbox ready' : 'Sandbox starting'}
+        </span>
+        <span>
+          {consoleEntries.length} console {consoleEntries.length === 1 ? 'line' : 'lines'}
+          {errorCount > 0 ? ` · ${errorCount} ${errorCount === 1 ? 'error' : 'errors'}` : ''}
+        </span>
         <span>Opaque origin</span>
         <span>Scripts isolated</span>
       </footer>

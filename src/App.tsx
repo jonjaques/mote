@@ -12,10 +12,15 @@ import { AppStateProvider, useAppState } from '@/state'
 import { MainArea } from '@/ui/MainArea'
 import { SidePane } from '@/ui/SidePane'
 
+// The model loaded last time is loaded again on the next visit when its weights are already
+// cached; from the Cache API that is seconds, and it removes the pick-and-click every reload.
+const LAST_MODEL_KEY = 'mote:model:v1'
+
 function MoteApp() {
   const { state, dispatch } = useAppState()
   const initialized = useRef(false)
   const autoloaded = useRef(false)
+  const autoloadRequested = useRef(false)
 
   const loadSelectedModel = useCallback(async () => {
     const selected = state.models.find((model) => model.id === state.model.selectedId)
@@ -29,6 +34,11 @@ function MoteApp() {
       })
       dispatch({ type: 'modelReady', id: selected.id })
       setAutomationStatus({ phase: 'ready', model: selected.id, progress: 1 })
+      try {
+        localStorage.setItem(LAST_MODEL_KEY, selected.id)
+      } catch {
+        // Remembering the model is a convenience; a full store must not fail the load.
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       dispatch({ type: 'modelError', message })
@@ -44,7 +54,13 @@ function MoteApp() {
     void prepareEngine()
       .then(async ({ models }) => {
         const params = new URLSearchParams(window.location.search)
-        const requestedId = params.get('model') ?? FAST_MODEL_ID
+        let remembered: string | null = null
+        try {
+          remembered = localStorage.getItem(LAST_MODEL_KEY)
+        } catch {
+          remembered = null
+        }
+        const requestedId = params.get('model') ?? remembered ?? FAST_MODEL_ID
         const requestedModel =
           models.find((model) => model.baseId === requestedId && model.source === 'local') ??
           models.find((model) => model.id === requestedId) ??
@@ -53,12 +69,17 @@ function MoteApp() {
 
         if (!requestedModel) throw new Error('No compatible WebLLM models were found.')
 
+        const cachedIds = await getCachedModelIds(models)
+        autoloadRequested.current =
+          params.get('autoload') === '1' ||
+          (!params.has('model') && remembered === requestedModel.id && cachedIds.has(requestedModel.id))
+
         dispatch({
           type: 'catalogReady',
           models,
           selectedId: requestedModel.id,
         })
-        dispatch({ type: 'cacheStatus', ids: await getCachedModelIds(models) })
+        dispatch({ type: 'cacheStatus', ids: cachedIds })
         setAutomationStatus({ phase: 'idle', model: requestedModel.id })
       })
       .catch((error) => {
@@ -69,13 +90,7 @@ function MoteApp() {
   }, [dispatch])
 
   useEffect(() => {
-    if (
-      autoloaded.current ||
-      !state.models.length ||
-      new URLSearchParams(window.location.search).get('autoload') !== '1'
-    ) {
-      return
-    }
+    if (autoloaded.current || !state.models.length || !autoloadRequested.current) return
     autoloaded.current = true
     void loadSelectedModel()
   }, [loadSelectedModel, state.models.length])

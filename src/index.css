@@ -100,6 +100,11 @@
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   min-width: 0;
+  /* A grid item's automatic minimum is its min-content height, and a scroll container's
+     min-content is its full content; without this the pane outgrows the viewport as the
+     conversation grows and the composer ends up below the fold instead of the list scrolling. */
+  min-height: 0;
+  overflow: hidden;
   border-right: 1px solid var(--border);
   background: var(--panel);
 }
@@ -868,6 +873,263 @@
   margin-left: auto;
 }
 
+/* ---- Session header actions, generation status, run statistics ---- */
+
+.session-actions {
+  display: flex;
+  flex: none;
+  gap: 0.15rem;
+}
+
+.session-actions button {
+  color: var(--muted-foreground);
+}
+
+.session-actions button:hover:not(:disabled) {
+  color: var(--foreground);
+}
+
+.generation-status {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0.4rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+}
+
+.generation-status svg {
+  width: 0.8rem;
+  height: 0.8rem;
+  flex: none;
+  color: var(--primary);
+}
+
+.generation-status > span:first-of-type {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.generation-meta,
+.message-stats {
+  margin-left: auto;
+  color: var(--muted-foreground);
+  font-size: 0.65rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.message-stats {
+  margin: 0.45rem 0 0;
+}
+
+.message p + .message-stats {
+  margin-top: 0.35rem;
+}
+
+.stream-box {
+  max-height: 9rem;
+  margin: 0.45rem 0 0;
+  overflow: auto;
+  padding: 0.5rem 0.6rem;
+  color: oklch(0.72 0.03 220);
+  background: oklch(0.11 0.008 255);
+  border: 1px solid color-mix(in oklch, var(--primary), transparent 75%);
+  border-left-width: 2px;
+  font: 0.62rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---- Tool cards: paths open the file, code and console lines stay compact ---- */
+
+.tool-call strong {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.tool-call strong code {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tool-path {
+  overflow: hidden;
+  min-width: 0;
+  padding: 0;
+  color: var(--accent-foreground);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-decoration: underline dotted;
+  text-underline-offset: 0.2em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-path:hover,
+.tool-path:focus-visible {
+  color: var(--primary);
+  outline: none;
+  text-decoration-style: solid;
+}
+
+.tool-code {
+  max-height: 7.5rem;
+  margin: 0.15rem 0 0;
+  overflow: auto;
+  padding: 0.4rem 0.5rem;
+  color: oklch(0.8 0.03 220);
+  background: oklch(0.11 0.008 255);
+  border: 1px solid color-mix(in oklch, var(--border), transparent 40%);
+  font: 0.62rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tool-console {
+  color: var(--muted-foreground);
+}
+
+.tool-runtime-error {
+  color: oklch(0.73 0.16 28);
+  white-space: pre-wrap;
+}
+
+/* ---- Workspace bar: tab badges, preview width, confirm states ---- */
+
+.tab-badge {
+  display: inline-grid;
+  min-width: 1.15rem;
+  height: 1.05rem;
+  padding: 0 0.3rem;
+  place-items: center;
+  color: var(--muted-foreground);
+  background: var(--muted);
+  border-radius: 999px;
+  font-size: 0.6rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+.tab-badge-error {
+  color: oklch(0.12 0.02 28);
+  background: oklch(0.73 0.16 28);
+}
+
+.segmented {
+  display: inline-flex;
+  margin-right: 0.35rem;
+  border: 1px solid var(--border);
+  background: var(--panel-raised);
+}
+
+.segmented button {
+  display: inline-grid;
+  width: 1.9rem;
+  height: 1.7rem;
+  place-items: center;
+  color: var(--muted-foreground);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.segmented button svg {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+
+.segmented button.is-active {
+  color: var(--foreground);
+  background: var(--muted);
+  box-shadow: inset 0 -1px var(--primary);
+}
+
+.segmented button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+.preview-panel {
+  display: grid;
+  justify-items: center;
+  background: oklch(0.115 0.007 255);
+}
+
+.preview-panel.is-mobile .sandbox-frame {
+  width: min(390px, 100%);
+  border-inline: 1px solid var(--border);
+}
+
+/* ---- Model panel: grouped menu and inline delete confirmation ---- */
+
+.model-menu [data-slot="select-label"] {
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.model-confirm {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid color-mix(in oklch, var(--destructive), transparent 55%);
+  background: color-mix(in oklch, var(--destructive), transparent 90%);
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+/* ---- Files view: editor, unsaved marker, actions ---- */
+
+.file-content header span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.file-dirty {
+  display: inline-block;
+  width: 0.4rem;
+  height: 0.4rem;
+  background: oklch(0.78 0.13 80);
+  border-radius: 999px;
+}
+
+.file-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.file-actions button {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.file-editor {
+  min-height: 0;
+  overflow: hidden;
+  background: oklch(0.11 0.008 255);
+}
+
+.file-editor .cm-editor {
+  height: 100%;
+}
+
+.file-editor .cm-scroller {
+  overflow: auto;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -879,12 +1141,23 @@
     overflow: auto;
   }
 
+  /* Stacked: chat first, workspace below, each a full screen. minmax(0, 1fr) matters: a
+     bare 1fr has an auto minimum and the action bar's intrinsic width would widen the page. */
   .mote-shell {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(32rem, 60svh) minmax(30rem, 55svh);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(100svh, auto) minmax(100svh, auto);
     width: 100%;
     height: auto;
     min-height: 100svh;
+  }
+
+  .side-pane {
+    grid-template-rows: auto auto minmax(16rem, 1fr);
+    overflow: visible;
+  }
+
+  .message-list {
+    min-height: 12rem;
   }
 
   .side-pane {
@@ -905,7 +1178,8 @@
 
   .workspace-actions {
     width: 100%;
-    justify-content: flex-end;
+    flex-wrap: wrap;
+    justify-content: flex-start;
     padding-top: 0.4rem;
     border-top: 1px solid var(--border);
   }
@@ -922,5 +1196,14 @@
 
   .files-view {
     grid-template-columns: 8.5rem minmax(0, 1fr);
+  }
+
+  .chat-heading {
+    flex-wrap: wrap;
+  }
+
+  .session-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 }

@@ -31,6 +31,7 @@ describe('assembleDocument', () => {
     expect(csp).toContain("default-src 'none'")
     expect(csp).toContain("connect-src 'none'")
     expect(csp).toContain("frame-src 'none'")
+    expect(csp).toContain("form-action 'none'")
     expect(csp).toMatch(/script-src [^;]*'unsafe-inline'/)
     expect(csp).toMatch(/script-src [^;]*'unsafe-eval'/)
   })

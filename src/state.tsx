@@ -10,12 +10,14 @@ import {
 
 import type { InitProgressReport } from '@mlc-ai/web-llm'
 
-import type { AgentToolActivity } from '@/llm/agent'
+import type { AgentProgress, AgentStats, AgentToolActivity } from '@/llm/agent'
 import type { AvailableModel } from '@/llm/models'
 
 const CHAT_STORAGE_KEY = 'mote:chat:v1'
 
 export type ModelPhase = 'idle' | 'checking' | 'loading' | 'ready' | 'error'
+export type WorkspaceView = 'preview' | 'files' | 'console'
+export type PreviewWidth = 'desktop' | 'mobile'
 
 export interface ChatMessage {
   id: string
@@ -23,7 +25,9 @@ export interface ChatMessage {
   content: string
   pending?: boolean
   cutOff?: boolean
+  stopped?: boolean
   tools?: AgentToolActivity[]
+  stats?: AgentStats
 }
 
 export interface ModelState {
@@ -35,11 +39,20 @@ export interface ModelState {
   cachedIds: Set<string>
 }
 
+export interface WorkspaceState {
+  view: WorkspaceView
+  selectedPath: string
+  previewWidth: PreviewWidth
+}
+
 export interface AppState {
   models: AvailableModel[]
   model: ModelState
   messages: ChatMessage[]
   generating: boolean
+  // Live position inside the current generation; undefined between turns.
+  progress?: AgentProgress
+  workspace: WorkspaceState
 }
 
 type Action =
@@ -54,23 +67,30 @@ type Action =
   | { type: 'appendMessage'; message: ChatMessage }
   | { type: 'streamMessage'; id: string; content: string }
   | { type: 'toolActivity'; messageId: string; activity: AgentToolActivity }
-  | { type: 'finishMessage'; id: string; cutOff?: boolean }
+  | { type: 'generationProgress'; progress?: AgentProgress }
+  | { type: 'finishMessage'; id: string; cutOff?: boolean; stopped?: boolean; stats?: AgentStats }
   | { type: 'setGenerating'; value: boolean }
   | { type: 'resetChat' }
+  | { type: 'setView'; view: WorkspaceView }
+  | { type: 'openFile'; path: string }
+  | { type: 'setPreviewWidth'; width: PreviewWidth }
 
 function loadMessages(): ChatMessage[] {
   try {
     const parsed: unknown = JSON.parse(localStorage.getItem(CHAT_STORAGE_KEY) ?? '[]')
     if (!Array.isArray(parsed)) return []
-    return parsed.filter((message): message is ChatMessage => {
-      if (!message || typeof message !== 'object') return false
-      const candidate = message as Partial<ChatMessage>
-      return (
-        typeof candidate.id === 'string' &&
-        (candidate.role === 'user' || candidate.role === 'assistant') &&
-        typeof candidate.content === 'string'
-      )
-    })
+    return parsed
+      .filter((message): message is ChatMessage => {
+        if (!message || typeof message !== 'object') return false
+        const candidate = message as Partial<ChatMessage>
+        return (
+          typeof candidate.id === 'string' &&
+          (candidate.role === 'user' || candidate.role === 'assistant') &&
+          typeof candidate.content === 'string'
+        )
+      })
+      // A turn that was mid-generation when the tab closed can never finish.
+      .map((message) => (message.pending ? { ...message, pending: false, stopped: true } : message))
   } catch {
     return []
   }
@@ -86,6 +106,7 @@ function createInitialState(): AppState {
     },
     messages: loadMessages(),
     generating: false,
+    workspace: { view: 'preview', selectedPath: 'index.html', previewWidth: 'desktop' },
   }
 }
 
@@ -178,19 +199,40 @@ function reducer(state: AppState, action: Action): AppState {
           }
         }),
       }
+    case 'generationProgress':
+      return { ...state, progress: action.progress }
     case 'finishMessage':
       return {
         ...state,
+        progress: undefined,
         messages: state.messages.map((message) =>
           message.id === action.id
-            ? { ...message, pending: false, cutOff: action.cutOff }
+            ? {
+                ...message,
+                pending: false,
+                cutOff: action.cutOff,
+                stopped: action.stopped,
+                stats: action.stats,
+              }
             : message,
         ),
       }
     case 'setGenerating':
       return { ...state, generating: action.value }
     case 'resetChat':
-      return { ...state, messages: [], generating: false }
+      return { ...state, messages: [], generating: false, progress: undefined }
+    case 'setView':
+      return { ...state, workspace: { ...state.workspace, view: action.view } }
+    case 'openFile':
+      return {
+        ...state,
+        workspace: { ...state.workspace, view: 'files', selectedPath: action.path },
+      }
+    case 'setPreviewWidth':
+      return {
+        ...state,
+        workspace: { ...state.workspace, view: 'preview', previewWidth: action.width },
+      }
   }
 }
 

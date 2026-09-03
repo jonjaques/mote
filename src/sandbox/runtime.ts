@@ -66,6 +66,59 @@ function sandboxBootstrap() {
     emit('error', [event.error ?? `${event.message} at ${event.filename}:${event.lineno}`])
   })
 
+  // The frame has no allow-modals, so alert/confirm/prompt would silently do nothing and a
+  // page that "alerts hi" looks broken. Show the text in-page and log it instead; keeping
+  // dialogs out also keeps the host tab and any automation from blocking on one.
+  function toast(text: string) {
+    let stack = document.getElementById('mote-toasts')
+    if (!stack) {
+      stack = document.createElement('div')
+      stack.id = 'mote-toasts'
+      stack.setAttribute('role', 'status')
+      stack.style.cssText =
+        'position:fixed;left:50%;bottom:1rem;z-index:2147483647;display:grid;gap:.4rem;max-width:min(32rem,90vw);transform:translateX(-50%);font:13px/1.4 system-ui,sans-serif;pointer-events:none'
+      ;(document.body ?? document.documentElement).appendChild(stack)
+    }
+    const item = document.createElement('div')
+    item.textContent = text
+    item.style.cssText =
+      'padding:.55rem .8rem;color:#e6f1f2;background:rgba(17,23,25,.94);border:1px solid rgba(99,230,209,.5);box-shadow:0 .5rem 1.5rem rgba(0,0,0,.35);white-space:pre-wrap;word-break:break-word'
+    stack.appendChild(item)
+    setTimeout(() => item.remove(), 4_000)
+  }
+
+  window.alert = (message?: unknown) => {
+    const text = message === undefined ? '' : String(message)
+    emit('info', [`alert: ${text}`])
+    toast(text || '(empty alert)')
+  }
+  window.confirm = (message?: string) => {
+    emit('info', [`confirm: ${message ?? ''} → true`])
+    toast(`confirm: ${message ?? ''} (answered yes)`)
+    return true
+  }
+  window.prompt = (message?: string) => {
+    emit('info', [`prompt: ${message ?? ''} → null`])
+    toast(`prompt: ${message ?? ''} (no answer in the sandbox)`)
+    return null
+  }
+
+  // Without allow-forms a submit is blocked with a browser-level warning the page never sees.
+  // Let the page's own handlers run first; only an unhandled submit is turned into feedback.
+  document.addEventListener('submit', (event) => {
+    if (event.defaultPrevented) return
+    event.preventDefault()
+    const form = event.target as HTMLFormElement | null
+    const fields: string[] = []
+    if (form) {
+      for (const [key, value] of new FormData(form)) {
+        fields.push(`${key}=${typeof value === 'string' ? value : value.name}`)
+      }
+    }
+    emit('info', [`form submitted (sandbox has no server): ${fields.join('&') || 'no fields'}`])
+    toast('Form submitted. The sandbox has no server, so nothing was sent.')
+  })
+
   window.addEventListener('unhandledrejection', (event) => {
     emit('error', [`Unhandled promise rejection: ${serialize(event.reason)}`])
   })

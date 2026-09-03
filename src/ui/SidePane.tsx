@@ -17,7 +17,7 @@ export function SidePane({ onLoadModel, onDeleteModel }: SidePaneProps) {
           <h1>Mote</h1>
           <p>Local browser runtime</p>
         </div>
-        <span className="version">POC·01</span>
+        <span className="version">v{__APP_VERSION__}</span>
       </header>
       <ModelPicker onLoad={onLoadModel} onDelete={onDeleteModel} />
       <Chat />

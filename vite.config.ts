@@ -1,6 +1,6 @@
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
-import { createReadStream } from 'node:fs'
+import { createReadStream, readFileSync } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import path from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
@@ -75,8 +75,15 @@ function serveModels(): Plugin {
   }
 }
 
+const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as {
+  version: string
+}
+
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(version),
+  },
   plugins: [
     serveModels(),
     tailwindcss(),

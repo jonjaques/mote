@@ -33,7 +33,9 @@ export function Sandbox() {
       ref={iframeRef}
       className="sandbox-frame"
       title="Mote project preview"
-      sandbox="allow-scripts"
+      // allow-forms only lets the submit event fire; the CSP's form-action 'none' blocks the
+      // navigation it would otherwise cause, and the runtime turns the event into feedback.
+      sandbox="allow-scripts allow-forms"
       srcDoc={srcDoc}
     />
   )
