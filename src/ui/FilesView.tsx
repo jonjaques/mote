@@ -45,6 +45,10 @@ function extensionsFor(path: string): Extension[] {
       syntaxHighlighting(highlight),
       editorTheme,
       EditorView.lineWrapping,
+      // CodeMirror's editable surface is a bare `role="textbox"`; without this a screen reader
+      // announces the code editor as "edit text, blank". The filename comes from the
+      // `aria-label` on the surrounding section, so this only has to name the control.
+      EditorView.contentAttributes.of({ 'aria-label': 'Code editor' }),
     ]
     extensionCache.set(key, extensions)
   }

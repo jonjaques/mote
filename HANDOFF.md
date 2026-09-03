@@ -141,7 +141,13 @@ Decisions these numbers settled:
    and supplies `syntaxHighlighting(highlight)`. `@codemirror/language` and
    `@lezer/highlight` are direct dependencies for this reason — pnpm's strict
    layout will not resolve them transitively.
-9. Still true from earlier: `resolve/main/` in local records, JSON 404 for
+9. **A conditionally mounted view panel loses its local state.** `FilesView`
+   holds the unsaved editor draft in `useState`, so while the workspace
+   mounted panels on `view === id`, switching to Preview and back silently
+   discarded an in-progress edit. Files and Console now mount on first open
+   and stay mounted, hiding with `visibility` the way the preview iframe
+   always has. Anything added to that section must do the same.
+10. Still true from earlier: `resolve/main/` in local records, JSON 404 for
    mirror misses, absolute same-origin URLs, `user` + `<tool_response>` for
    Qwen, no `baseUrl`, no `models/` in `public/`, `.cdp-profile/` and
    `models/` ignored by Vite's watcher.

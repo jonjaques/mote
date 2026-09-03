@@ -17,6 +17,13 @@ function makeId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+// The transcript smooth-scrolls itself while a turn streams, which is motion the reader never
+// asked for. `scrollTo` overrides CSS `scroll-behavior`, so the preference has to be read here.
+// Read per call rather than cached: it can change while the tab is open.
+function prefersReducedMotion(): boolean {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
 function useElapsedSeconds(startedAt: number | undefined): number {
   // Ticks once a second; the first paint shows 0s rather than reading the clock in render.
   const [now, setNow] = useState(() => startedAt ?? 0)
@@ -128,7 +135,7 @@ export function Chat() {
   useEffect(() => {
     scrollRef.current?.scrollTo({
       top: scrollRef.current.scrollHeight,
-      behavior: state.generating ? 'smooth' : 'auto',
+      behavior: state.generating && !prefersReducedMotion() ? 'smooth' : 'auto',
     })
   }, [state.messages, state.progress, state.generating])
 

@@ -44,6 +44,15 @@ export function MainArea() {
   const [consoleEntries, setConsoleEntries] = useState<SandboxConsoleEntry[]>([])
   const [exporting, setExporting] = useState(false)
   const [confirmReset, setConfirmReset] = useState(false)
+  // Once opened, a view stays mounted and hides with `visibility`, the same way the preview
+  // iframe stays alive behind the other tabs. Mounting on `view === id` tore FilesView down on
+  // every tab switch, which silently discarded an unsaved editor draft — the draft lives in
+  // that component's state — and reset the console's scroll position with it. Still lazy on
+  // first open, so the CodeMirror chunk is not fetched until someone actually opens Files.
+  // Adjusted during render rather than from an effect: oxlint flags setState in an effect and
+  // the React Compiler bails out of the component.
+  const [opened, setOpened] = useState<WorkspaceView[]>(['preview'])
+  if (!opened.includes(view)) setOpened([...opened, view])
 
   useEffect(() => sandboxBridge.subscribeReady(setSandboxReady), [])
   useEffect(() => sandboxBridge.subscribeConsole(setConsoleEntries), [])
@@ -168,15 +177,15 @@ export function MainArea() {
         >
           <Sandbox />
         </div>
-        {view === 'files' && (
-          <div className="view-panel is-active">
+        {opened.includes('files') && (
+          <div className={`view-panel ${view === 'files' ? 'is-active' : ''}`}>
             <Suspense fallback={<p className="view-loading">Loading editor…</p>}>
               <FilesView />
             </Suspense>
           </div>
         )}
-        {view === 'console' && (
-          <div className="view-panel is-active">
+        {opened.includes('console') && (
+          <div className={`view-panel ${view === 'console' ? 'is-active' : ''}`}>
             <ConsoleView />
           </div>
         )}

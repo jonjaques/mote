@@ -518,12 +518,6 @@
   padding: 0 1rem;
 }
 
-.spin-icon {
-  width: 0.85rem;
-  color: var(--primary);
-  animation: spin 1.2s linear infinite;
-}
-
 .message-list {
   min-height: 0;
   overflow-y: auto;
@@ -1533,13 +1527,46 @@
   margin-left: auto;
 }
 
+/* Load-bearing despite having no rule in this file that names it: Tailwind's `animate-spin`
+   resolves to `--animate-spin: spin 1s linear infinite` but does not emit the keyframes, so
+   this is what the four `<LoaderCircle className="animate-spin" />` icons actually run. The
+   `.spin-icon` class that used to sit above it was dead and has been removed; the keyframes
+   are not. Check the built CSS for `@keyframes spin` before deleting this. */
 @keyframes spin {
   to {
     transform: rotate(360deg);
   }
 }
 
-/* ---- Adaptation: narrow desktop windows, touch input, short viewports ---- */
+/* ---- Adaptation: reduced motion, narrow desktop windows, touch input, short viewports ---- */
+
+/* Mote shipped no reduced-motion handling at all, and its longest-running animation is a
+   spinner that can turn for minutes during a cold start — precisely the case this preference
+   exists for. Holding the spinners still costs nothing here, because every one of them sits
+   beside live text that already reports progress: "Loading" on the runtime button, the elapsed
+   seconds in the generation status, the tabular percentage on the load bar. Ending the
+   animation at `to` also leaves each icon at rotate(360deg), which is upright.
+
+   The blanket selector is deliberate: shadcn's select and tooltip bring their own zoom and
+   slide keyframes through utility classes this file never names. The chat transcript's
+   smooth auto-scroll is not reachable from here — `scrollTo` overrides CSS `scroll-behavior`,
+   so `Chat.tsx` reads the preference itself. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+
+  /* The one exception. The load bar's gold-to-cyan cross-fade is a change of hue, not of
+     position — nothing moves — and it is the moment the interface reports that the weights
+     stopped arriving over the network and started becoming a GPU. */
+  .progress-track span {
+    transition-duration: 500ms !important;
+  }
+}
 
 /* Measured, not guessed: the workspace bar's labelled min-content is 815px, and with the pane
    clamped it stops fitting at about 1140px. Below that the actions drop to icons — which is
