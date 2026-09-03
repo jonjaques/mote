@@ -1,18 +1,24 @@
 import type { ChatCompletionMessageParam } from '@mlc-ai/web-llm'
 
 import { prepareEngine } from './engine'
-import { SMART_MODEL_ID } from './models'
+import { isPageBuilderModel } from './models'
 import { pageBuilderPrompt } from './prompts'
 import {
+  createTurnContext,
   parseToolCalls,
   runTool,
-  structuralTag,
+  structuralTagFor,
   visibleAssistantText,
   type ToolCall,
   type ToolResult,
 } from './tools'
 
 const MAX_ROUNDS = 8
+// Small models re-issue inspection calls: the same run_js once it "worked" in the DOM, or
+// read_file cycling over every project file. Nothing read can change until something is
+// written, so a round made only of calls already answered since the last write_file is a
+// repeat. Two nudges are enough to redirect a model that can be redirected; then stop.
+const MAX_REPEATED_ROUNDS = 2
 
 export interface AgentToolActivity {
   id: string
@@ -52,13 +58,16 @@ export async function runAgent(
   callbacks: AgentCallbacks,
 ): Promise<AgentResult> {
   const { engine } = await prepareEngine()
-  const smartModelLoaded = engine.modelId?.some((id) => id.startsWith(SMART_MODEL_ID)) ?? false
+  const pageBuilderLoaded = isPageBuilderModel(engine.modelId)
+  const turn = createTurnContext()
   const messages: ChatCompletionMessageParam[] = [
     { role: 'system', content: pageBuilderPrompt },
     ...history,
     { role: 'user', content: input },
   ]
   let finalVisibleText = ''
+  const answeredSinceWrite = new Set<string>()
+  let repeatedRounds = 0
 
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
     const stream = await engine.chat.completions.create({
@@ -66,7 +75,7 @@ export async function runAgent(
       stream: true,
       response_format: {
         type: 'structural_tag',
-        structural_tag: structuralTag,
+        structural_tag: structuralTagFor({ requireCall: round === 0 }),
       },
       max_tokens: 4_096,
       temperature: 0.2,
@@ -118,11 +127,35 @@ export async function runAgent(
     }
 
     messages.push({ role: 'assistant', content: rawContent })
+
+    const signatures = calls.map((call) => JSON.stringify(call))
+    if (signatures.every((signature) => answeredSinceWrite.has(signature))) {
+      repeatedRounds += 1
+      if (repeatedRounds >= MAX_REPEATED_ROUNDS) {
+        const content =
+          finalVisibleText ||
+          'Stopped: the model kept repeating tool calls without changing the project.'
+        callbacks.onText(content)
+        return { content, cutOff: false, rounds: round + 1 }
+      }
+      messages.push({
+        role: 'user',
+        content: `<tool_response>${JSON.stringify({
+          ok: false,
+          summary:
+            'You already made this call and nothing has changed since, so its result would be identical. To change the project, write_file the complete updated file now.',
+        })}</tool_response>`,
+      })
+      continue
+    }
+    for (const signature of signatures) answeredSinceWrite.add(signature)
+    if (calls.some((call) => call.name === 'write_file')) answeredSinceWrite.clear()
+
     const completed: Array<{ call: ToolCall; result: ToolResult }> = []
     for (const [index, call] of calls.entries()) {
       const id = activityId(round, index)
       callbacks.onTool({ id, call, status: 'running' })
-      const result = await runTool(call)
+      const result = await runTool(call, turn)
       callbacks.onTool({
         id,
         call,
@@ -141,7 +174,7 @@ export async function runAgent(
       ({ call }) => call.name === 'write_file' && call.arguments.path === 'index.html',
     )?.call.arguments.content
     const smartPageNeedsStyles =
-      smartModelLoaded &&
+      pageBuilderLoaded &&
       typeof writtenHtml === 'string' &&
       /href=["'](?:\.\/)?styles\.css["']/i.test(writtenHtml) &&
       !writtenPaths.includes('styles.css')

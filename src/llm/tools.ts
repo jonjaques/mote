@@ -1,4 +1,4 @@
-import { projectFS } from '@/sandbox/fs'
+import { normalizeProjectPath, projectFS } from '@/sandbox/fs'
 import { sandboxBridge } from '@/sandbox/runtime'
 
 export interface ToolCall {
@@ -13,6 +13,18 @@ export interface ToolResult {
   runtimeErrors?: string[]
 }
 
+// What one agent turn has already seen. Tool payloads never enter the chat history, so a
+// model asked for a follow-up has no memory of the file it wrote last turn; without this
+// record it happily replaces a 700-byte stylesheet with the one rule the user asked for.
+export interface TurnContext {
+  readPaths: Set<string>
+  writtenPaths: Set<string>
+}
+
+export function createTurnContext(): TurnContext {
+  return { readPaths: new Set(), writtenPaths: new Set() }
+}
+
 interface JsonSchema {
   type: 'object'
   properties: Record<string, unknown>
@@ -24,7 +36,7 @@ interface ToolDefinition {
   name: string
   description: string
   schema: JsonSchema
-  run(arguments_: Record<string, unknown>): Promise<ToolResult>
+  run(arguments_: Record<string, unknown>, turn: TurnContext): Promise<ToolResult>
 }
 
 export interface StructuralTag {
@@ -53,6 +65,10 @@ function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds))
 }
 
+// The filesystem normalises "./styles.css" and "styles.css" to one entry; the turn record
+// must agree with it or a read under one spelling would not license a write under the other.
+const normalizedKey = normalizeProjectPath
+
 const tools: ToolDefinition[] = [
   {
     name: 'write_file',
@@ -66,12 +82,21 @@ const tools: ToolDefinition[] = [
       required: ['path', 'content'],
       additionalProperties: false,
     },
-    async run(arguments_) {
+    async run(arguments_, turn) {
       const path = requireString(arguments_, 'path')
       const content = requireString(arguments_, 'content')
+      const key = normalizedKey(path)
+      if (!projectFS.isPristine(path) && !turn.readPaths.has(key) && !turn.writtenPaths.has(key)) {
+        const existing = projectFS.read(path)
+        return {
+          ok: false,
+          summary: `${key} already exists with ${existing.length} characters you have not read this turn. Call read_file on it first, then write_file the complete updated file that keeps everything the user did not ask to change.`,
+        }
+      }
       const writtenAt = Date.now()
       const sandboxRevision = sandboxBridge.getDocumentRevision()
       const bytes = projectFS.write(path, content)
+      turn.writtenPaths.add(key)
 
       await sandboxBridge.waitForReloadAfter(sandboxRevision)
       // The runtime announces itself before app.js executes, so allow its first task to settle.
@@ -100,9 +125,10 @@ const tools: ToolDefinition[] = [
       required: ['path'],
       additionalProperties: false,
     },
-    async run(arguments_) {
+    async run(arguments_, turn) {
       const path = requireString(arguments_, 'path')
       const content = projectFS.read(path)
+      turn.readPaths.add(normalizedKey(path))
       const limit = 8_000
       return {
         ok: true,
@@ -132,7 +158,8 @@ const tools: ToolDefinition[] = [
   },
   {
     name: 'run_js',
-    description: 'Evaluate JavaScript inside the isolated preview and return its value and new console lines.',
+    description:
+      'Evaluate JavaScript inside the live preview and return its value and new console lines. For inspection only: DOM changes are discarded on the next reload, so use write_file to change the project.',
     schema: {
       type: 'object',
       properties: {
@@ -160,7 +187,7 @@ const tools: ToolDefinition[] = [
   },
   {
     name: 'get_dom',
-    description: 'Return the rendered document HTML for visual debugging.',
+    description: 'Return the rendered document HTML for inspection.',
     schema: {
       type: 'object',
       properties: {
@@ -186,21 +213,41 @@ const tools: ToolDefinition[] = [
 
 const toolMap = new Map(tools.map((tool) => [tool.name, tool]))
 
-export const structuralTag: StructuralTag = {
-  type: 'structural_tag',
-  format: {
-    type: 'triggered_tags',
-    triggers: ['<tool_call>'],
-    tags: tools.map((tool) => ({
-      type: 'tag',
-      begin: `<tool_call>\n{"name":"${tool.name}","arguments":`,
-      content: { type: 'json_schema', json_schema: tool.schema },
-      end: '}\n</tool_call>',
-    })),
-    at_least_one: false,
-    stop_after_first: false,
-  },
+// Two wrappers, one wire format. `<tool_call>` is Qwen's native trigger. The Markdown fence is
+// a trigger because Qwen2.5-Coder habitually answers with a ```json block instead: left as free
+// text the JSON inside carries raw newlines and quotes and cannot be parsed, so a full page is
+// generated and thrown away. Once the fence itself activates the grammar the block is valid.
+const FENCE = '```'
+const wrappers = [
+  { begin: (name: string) => `<tool_call>\n{"name":"${name}","arguments":`, end: '}\n</tool_call>' },
+  { begin: (name: string) => `${FENCE}json\n{"name":"${name}","arguments":`, end: `}\n${FENCE}` },
+]
+
+// `requireCall` mirrors the official structural-tag example, which forces at least one tag on
+// the turn that answers the user. The agent sets it for the first round only: a request must
+// start with a tool call, but the rounds after a tool result must be free to answer in prose
+// or the loop could never end with a summary.
+export function structuralTagFor({ requireCall }: { requireCall: boolean }): StructuralTag {
+  return {
+    type: 'structural_tag',
+    format: {
+      type: 'triggered_tags',
+      triggers: ['<tool_call>', FENCE],
+      tags: wrappers.flatMap((wrapper) =>
+        tools.map((tool) => ({
+          type: 'tag' as const,
+          begin: wrapper.begin(tool.name),
+          content: { type: 'json_schema' as const, json_schema: tool.schema },
+          end: wrapper.end,
+        })),
+      ),
+      at_least_one: requireCall,
+      stop_after_first: false,
+    },
+  }
 }
+
+export const structuralTag: StructuralTag = structuralTagFor({ requireCall: false })
 
 export function parseToolCalls(content: string): ToolCall[] {
   const calls: ToolCall[] = []
@@ -212,17 +259,20 @@ export function parseToolCalls(content: string): ToolCall[] {
 
   if (calls.length > 0) return calls
 
-  // Qwen2.5-Coder sometimes describes an exact call in a JSON fence instead of emitting the
-  // trigger. Accept only a single registered call object; broader JSON recovery would turn
-  // ordinary assistant examples into side effects.
-  const fenced = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/i)?.[1]
-  const raw = content.trim().startsWith('{') && content.trim().endsWith('}')
-    ? content.trim()
-    : undefined
-  const fallback = fenced ?? raw
-  if (fallback) {
-    const call = parseToolCallObject(fallback)
-    if (toolMap.has(call.name)) calls.push(call)
+  // Fenced calls: valid JSON when the grammar produced them, arbitrary text when the model
+  // wrote a fence the grammar did not cover. Accept only registered call objects and treat
+  // anything else as prose, so a config sample or snippet never becomes a side effect or a
+  // "broken tool call" complaint sent back to the model.
+  const fenced = [...content.matchAll(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/gi)].map((m) => m[1])
+  const trimmed = content.trim()
+  const raw = trimmed.startsWith('{') && trimmed.endsWith('}') ? [trimmed] : []
+  for (const candidate of fenced.length ? fenced : raw) {
+    try {
+      const call = parseToolCallObject(candidate)
+      if (toolMap.has(call.name)) calls.push(call)
+    } catch {
+      // Not a call object.
+    }
   }
   return calls
 }
@@ -243,18 +293,19 @@ export function visibleAssistantText(content: string): string {
     .replace(/<think>[\s\S]*$/g, '')
     .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
     .replace(/<tool_call>[\s\S]*$/g, '')
-    .replace(/```(?:json)?\s*\{[\s\S]*?"name"\s*:[\s\S]*?```\s*$/i, '')
+    .replace(/```(?:json)?\s*\{[\s\S]*?"name"\s*:[\s\S]*?```/gi, '')
+    .replace(/```(?:json)?\s*\{[\s\S]*?"name"\s*:[\s\S]*$/i, '')
     .trim()
 }
 
-export async function runTool(call: ToolCall): Promise<ToolResult> {
+export async function runTool(call: ToolCall, turn: TurnContext = createTurnContext()): Promise<ToolResult> {
   const tool = toolMap.get(call.name)
   if (!tool) {
     return { ok: false, summary: `Unknown tool: ${call.name}` }
   }
 
   try {
-    return await tool.run(call.arguments)
+    return await tool.run(call.arguments, turn)
   } catch (error) {
     return {
       ok: false,
