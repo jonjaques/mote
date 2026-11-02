@@ -1,0 +1,21 @@
+{
+  "$schema": "https://t3.codes/schema/t3.json",
+  "iconPath": "public/favicon.svg",
+  "scripts": [
+    {
+      "name": "Install deps",
+      "icon": "configure",
+      "command": "mise exec -- pnpm install --frozen-lockfile --prefer-offline",
+      "runOnWorktreeCreate": true
+    },
+    {
+      "name": "Dev",
+      "icon": "play",
+      "command": "mise exec -- pnpm dev",
+      "async": true
+    },
+    { "name": "Test", "icon": "test", "command": "mise exec -- pnpm test" },
+    { "name": "Lint", "icon": "lint", "command": "mise exec -- pnpm lint" },
+    { "name": "Build", "icon": "build", "command": "mise exec -- pnpm build" }
+  ]
+}
